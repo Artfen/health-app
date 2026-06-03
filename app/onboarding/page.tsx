@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Pulse, WifiHigh, CheckCircle, Warning } from '@phosphor-icons/react';
+import { Pulse, WifiHigh, CheckCircle, Warning, DeviceMobile } from '@phosphor-icons/react';
 
-type Step = 'welcome' | 'garmin' | 'success';
+type Step = 'welcome' | 'choose' | 'garmin' | 'terra' | 'success';
+type SuccessSource = 'garmin' | 'terra';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -14,26 +15,39 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [successSource, setSuccessSource] = useState<SuccessSource>('garmin');
 
   async function connectGarmin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError('');
-
     const res = await fetch('/api/garmin/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ garminEmail, garminPassword }),
     });
-
     const data = await res.json();
     setLoading(false);
-
     if (!res.ok) {
       setError(data.error ?? 'Connection failed');
     } else {
       setDisplayName(data.displayName ?? 'Athlete');
+      setSuccessSource('garmin');
       setStep('success');
+    }
+  }
+
+  async function connectTerra() {
+    setLoading(true);
+    setError('');
+    const res = await fetch('/api/terra/connect', { method: 'POST' });
+    const data = await res.json();
+    setLoading(false);
+    if (!res.ok) {
+      setError(data.error ?? 'Failed to start connection');
+    } else {
+      // Open Terra widget in same tab - it will redirect back on completion
+      window.location.href = data.url;
     }
   }
 
@@ -44,40 +58,95 @@ export default function OnboardingPage() {
 
   if (step === 'welcome') {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center px-4" style={{ background: 'var(--background)' }}>
+      <div className="min-h-[100dvh] flex items-center justify-center px-4" style={{ background: 'var(--bg)' }}>
         <div className="w-full max-w-md text-center">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6" style={{ background: 'var(--accent)' }}>
             <Pulse size={32} weight="bold" color="white" />
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight mb-3" style={{ color: 'var(--text-primary)' }}>
+          <h1 className="text-3xl font-semibold tracking-tight mb-3" style={{ color: 'var(--text-1)' }}>
             Welcome to PulseSync
           </h1>
-          <p className="text-base leading-relaxed mb-10 max-w-sm mx-auto" style={{ color: 'var(--text-secondary)' }}>
-            Connect your Garmin Fenix to start tracking your health and competing with friends.
+          <p className="text-base leading-relaxed mb-10 max-w-sm mx-auto" style={{ color: 'var(--text-2)' }}>
+            Connect your wearable to start tracking your health and competing with friends.
           </p>
 
           <div className="flex flex-col gap-3 text-left rounded-2xl p-6 mb-8" style={cardStyle}>
             {[
-              { icon: '🏃', text: 'Activities, steps, and distance' },
-              { icon: '💤', text: 'Sleep quality and recovery' },
-              { icon: '💚', text: 'HRV, body battery, and stress' },
-              { icon: '👥', text: 'Compare metrics with friends' },
-            ].map(({ icon, text }) => (
+              'Activities, steps, and distance',
+              'Sleep quality and recovery',
+              'HRV, body battery, and stress',
+              'Compare metrics with friends',
+            ].map((text) => (
               <div key={text} className="flex items-center gap-3">
-                <span className="text-lg">{icon}</span>
-                <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{text}</span>
+                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }} />
+                <span className="text-sm" style={{ color: 'var(--text-2)' }}>{text}</span>
               </div>
             ))}
           </div>
 
           <button
-            onClick={() => setStep('garmin')}
-            className="w-full py-3.5 rounded-xl text-sm font-semibold cursor-pointer transition-all"
+            onClick={() => setStep('choose')}
+            className="w-full py-3.5 rounded-xl text-sm font-semibold cursor-pointer"
             style={{ background: 'var(--accent)', color: 'white' }}
-            onMouseEnter={(e) => ((e.target as HTMLElement).style.background = 'var(--accent-hover)')}
-            onMouseLeave={(e) => ((e.target as HTMLElement).style.background = 'var(--accent)')}
           >
-            Connect Garmin
+            Get started
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'choose') {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center px-4" style={{ background: 'var(--bg)' }}>
+        <div className="w-full max-w-sm">
+          <h2 className="text-2xl font-semibold tracking-tight text-center mb-2" style={{ color: 'var(--text-1)' }}>
+            Choose your device
+          </h2>
+          <p className="text-sm text-center mb-8" style={{ color: 'var(--text-2)' }}>
+            Connect your wearable to start syncing data.
+          </p>
+
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => setStep('garmin')}
+              className="w-full flex items-center gap-4 p-5 rounded-2xl text-left cursor-pointer transition-all"
+              style={{ ...cardStyle, borderColor: 'var(--border)' }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--border)')}
+            >
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent)' }}>
+                <WifiHigh size={20} color="white" weight="bold" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Garmin</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Fenix, Forerunner, Vivoactive...</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setStep('terra')}
+              className="w-full flex items-center gap-4 p-5 rounded-2xl text-left cursor-pointer transition-all"
+              style={{ ...cardStyle, borderColor: 'var(--border)' }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--border)')}
+            >
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#1d1d1f' }}>
+                <DeviceMobile size={20} color="white" weight="bold" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Apple Health / Other</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Apple Watch, Fitbit, Whoop, Oura...</p>
+              </div>
+            </button>
+          </div>
+
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="w-full mt-6 py-3 rounded-xl text-sm cursor-pointer"
+            style={{ color: 'var(--text-3)' }}
+          >
+            Skip for now
           </button>
         </div>
       </div>
@@ -86,66 +155,63 @@ export default function OnboardingPage() {
 
   if (step === 'garmin') {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center px-4" style={{ background: 'var(--background)' }}>
+      <div className="min-h-[100dvh] flex items-center justify-center px-4" style={{ background: 'var(--bg)' }}>
         <div className="w-full max-w-sm">
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-6" style={{ background: 'var(--accent-muted)' }}>
+          <button onClick={() => setStep('choose')} className="text-sm mb-6 cursor-pointer" style={{ color: 'var(--text-3)' }}>
+            Back
+          </button>
+
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-6" style={{ background: 'rgba(232,82,28,0.12)' }}>
             <WifiHigh size={24} style={{ color: 'var(--accent)' }} />
           </div>
 
-          <h2 className="text-2xl font-semibold tracking-tight text-center mb-2" style={{ color: 'var(--text-primary)' }}>
-            Connect Garmin Connect
+          <h2 className="text-2xl font-semibold tracking-tight text-center mb-2" style={{ color: 'var(--text-1)' }}>
+            Connect Garmin
           </h2>
-          <p className="text-sm text-center mb-8" style={{ color: 'var(--text-secondary)' }}>
+          <p className="text-sm text-center mb-8" style={{ color: 'var(--text-2)' }}>
             Your credentials are used only to fetch your data and are stored encrypted.
           </p>
 
           <div className="rounded-2xl p-6" style={cardStyle}>
             <form onSubmit={connectGarmin} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                  Garmin Connect email
-                </label>
+                <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Garmin Connect email</label>
                 <input
                   type="email"
                   value={garminEmail}
                   onChange={(e) => setGarminEmail(e.target.value)}
-                  placeholder="your@garmin-email.com"
+                  placeholder="your@email.com"
                   required
-                  className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
-                  style={{ background: 'var(--surface-elevated)', border: '1px solid var(--border-strong)', color: 'var(--text-primary)' }}
+                  className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }}
                   onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
                   onBlur={(e) => (e.target.style.borderColor = 'var(--border-strong)')}
                 />
               </div>
-
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                  Garmin Connect password
-                </label>
+                <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Garmin Connect password</label>
                 <input
                   type="password"
                   value={garminPassword}
                   onChange={(e) => setGarminPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
-                  style={{ background: 'var(--surface-elevated)', border: '1px solid var(--border-strong)', color: 'var(--text-primary)' }}
+                  className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }}
                   onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
                   onBlur={(e) => (e.target.style.borderColor = 'var(--border-strong)')}
                 />
               </div>
-
               {error && (
-                <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.1)' }}>
-                  <Warning size={16} style={{ color: 'var(--danger)', flexShrink: 0, marginTop: 1 }} />
-                  <p className="text-sm" style={{ color: 'var(--danger)' }}>{error}</p>
+                <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg" style={{ background: 'var(--red-bg)' }}>
+                  <Warning size={16} style={{ color: 'var(--red)', flexShrink: 0, marginTop: 1 }} />
+                  <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>
                 </div>
               )}
-
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-xl text-sm font-semibold transition-all mt-2 cursor-pointer disabled:opacity-50"
+                className="w-full py-3 rounded-xl text-sm font-semibold mt-1 cursor-pointer disabled:opacity-50"
                 style={{ background: 'var(--accent)', color: 'white' }}
               >
                 {loading ? 'Connecting...' : 'Connect'}
@@ -153,7 +219,7 @@ export default function OnboardingPage() {
             </form>
           </div>
 
-          <p className="text-xs text-center mt-4" style={{ color: 'var(--text-muted)' }}>
+          <p className="text-xs text-center mt-4" style={{ color: 'var(--text-3)' }}>
             Note: Disable MFA on your Garmin account before connecting.
           </p>
         </div>
@@ -161,17 +227,67 @@ export default function OnboardingPage() {
     );
   }
 
-  return (
-    <div className="min-h-[100dvh] flex items-center justify-center px-4" style={{ background: 'var(--background)' }}>
-      <div className="w-full max-w-sm text-center">
-        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: 'rgba(34,197,94,0.15)' }}>
-          <CheckCircle size={36} style={{ color: 'var(--success)' }} weight="fill" />
+  if (step === 'terra') {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center px-4" style={{ background: 'var(--bg)' }}>
+        <div className="w-full max-w-sm text-center">
+          <button onClick={() => setStep('choose')} className="text-sm mb-6 cursor-pointer block" style={{ color: 'var(--text-3)' }}>
+            Back
+          </button>
+
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-6" style={{ background: '#1d1d1f' }}>
+            <DeviceMobile size={24} color="white" weight="bold" />
+          </div>
+
+          <h2 className="text-2xl font-semibold tracking-tight mb-2" style={{ color: 'var(--text-1)' }}>
+            Apple Health & More
+          </h2>
+          <p className="text-sm mb-8 max-w-xs mx-auto" style={{ color: 'var(--text-2)' }}>
+            Connect Apple Watch, Fitbit, Whoop, Oura, Polar, and more. You'll be redirected to authorize your device.
+          </p>
+
+          <div className="rounded-2xl p-5 mb-6 text-left" style={cardStyle}>
+            {['Apple Health (Apple Watch)', 'Fitbit', 'Whoop', 'Oura Ring', 'Polar', 'Suunto', 'Withings'].map((device) => (
+              <div key={device} className="flex items-center gap-2.5 py-2">
+                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }} />
+                <span className="text-sm" style={{ color: 'var(--text-2)' }}>{device}</span>
+              </div>
+            ))}
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg mb-4 text-left" style={{ background: 'var(--red-bg)' }}>
+              <Warning size={16} style={{ color: 'var(--red)', flexShrink: 0, marginTop: 1 }} />
+              <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>
+            </div>
+          )}
+
+          <button
+            onClick={connectTerra}
+            disabled={loading}
+            className="w-full py-3.5 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50"
+            style={{ background: '#1d1d1f', color: 'white' }}
+          >
+            {loading ? 'Opening...' : 'Connect my device'}
+          </button>
         </div>
-        <h2 className="text-2xl font-semibold tracking-tight mb-2" style={{ color: 'var(--text-primary)' }}>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-[100dvh] flex items-center justify-center px-4" style={{ background: 'var(--bg)' }}>
+      <div className="w-full max-w-sm text-center">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: 'rgba(34,197,94,0.12)' }}>
+          <CheckCircle size={36} style={{ color: '#22c55e' }} weight="fill" />
+        </div>
+        <h2 className="text-2xl font-semibold tracking-tight mb-2" style={{ color: 'var(--text-1)' }}>
           Connected!
         </h2>
-        <p className="text-sm mb-8" style={{ color: 'var(--text-secondary)' }}>
-          Welcome, {displayName}. Your Garmin data is being synced.
+        <p className="text-sm mb-8" style={{ color: 'var(--text-2)' }}>
+          {successSource === 'garmin'
+            ? `Welcome, ${displayName}. Your Garmin data is being synced.`
+            : 'Your device is connected. Data will sync automatically.'}
         </p>
         <button
           onClick={() => router.push('/dashboard')}

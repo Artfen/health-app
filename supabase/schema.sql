@@ -1,7 +1,10 @@
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
 
--- Profiles (extends Supabase auth.users)
+-- ============================================================
+-- TABLES (all created before any cross-reference RLS policies)
+-- ============================================================
+
 create table public.profiles (
   id uuid references auth.users on delete cascade primary key,
   email text not null,
@@ -13,28 +16,6 @@ create table public.profiles (
   updated_at timestamptz default now()
 );
 
-alter table public.profiles enable row level security;
-
-create policy "Users can view their own profile"
-  on public.profiles for select using (auth.uid() = id);
-
-create policy "Users can update their own profile"
-  on public.profiles for update using (auth.uid() = id);
-
-create policy "Users can insert their own profile"
-  on public.profiles for insert with check (auth.uid() = id);
-
--- Group members can see each other's profiles
-create policy "Group members can view each other's profiles"
-  on public.profiles for select using (
-    exists (
-      select 1 from public.group_members gm1
-      join public.group_members gm2 on gm1.group_id = gm2.group_id
-      where gm1.user_id = auth.uid() and gm2.user_id = profiles.id
-    )
-  );
-
--- Garmin tokens (sensitive - only the owner can access)
 create table public.garmin_tokens (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references auth.users on delete cascade unique not null,
@@ -44,12 +25,6 @@ create table public.garmin_tokens (
   updated_at timestamptz default now()
 );
 
-alter table public.garmin_tokens enable row level security;
-
-create policy "Users can only access their own tokens"
-  on public.garmin_tokens for all using (auth.uid() = user_id);
-
--- Groups
 create table public.groups (
   id uuid default uuid_generate_v4() primary key,
   name text not null,
@@ -58,23 +33,6 @@ create table public.groups (
   created_at timestamptz default now()
 );
 
-alter table public.groups enable row level security;
-
-create policy "Group members can view their groups"
-  on public.groups for select using (
-    exists (
-      select 1 from public.group_members
-      where group_id = groups.id and user_id = auth.uid()
-    )
-  );
-
-create policy "Users can create groups"
-  on public.groups for insert with check (auth.uid() = owner_id);
-
-create policy "Group owners can update their groups"
-  on public.groups for update using (auth.uid() = owner_id);
-
--- Group members
 create table public.group_members (
   id uuid default uuid_generate_v4() primary key,
   group_id uuid references public.groups on delete cascade not null,
@@ -83,24 +41,6 @@ create table public.group_members (
   unique(group_id, user_id)
 );
 
-alter table public.group_members enable row level security;
-
-create policy "Users can view memberships in their groups"
-  on public.group_members for select using (
-    user_id = auth.uid() or
-    exists (
-      select 1 from public.group_members gm
-      where gm.group_id = group_members.group_id and gm.user_id = auth.uid()
-    )
-  );
-
-create policy "Users can join groups"
-  on public.group_members for insert with check (auth.uid() = user_id);
-
-create policy "Users can leave groups"
-  on public.group_members for delete using (auth.uid() = user_id);
-
--- Health snapshots (cached Garmin data per day per user)
 create table public.health_snapshots (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references auth.users on delete cascade not null,
@@ -124,8 +64,71 @@ create table public.health_snapshots (
   unique(user_id, date)
 );
 
+-- ============================================================
+-- RLS
+-- ============================================================
+
+alter table public.profiles enable row level security;
+alter table public.garmin_tokens enable row level security;
+alter table public.groups enable row level security;
+alter table public.group_members enable row level security;
 alter table public.health_snapshots enable row level security;
 
+-- profiles
+create policy "Users can view their own profile"
+  on public.profiles for select using (auth.uid() = id);
+
+create policy "Users can update their own profile"
+  on public.profiles for update using (auth.uid() = id);
+
+create policy "Users can insert their own profile"
+  on public.profiles for insert with check (auth.uid() = id);
+
+create policy "Group members can view each other's profiles"
+  on public.profiles for select using (
+    exists (
+      select 1 from public.group_members gm1
+      join public.group_members gm2 on gm1.group_id = gm2.group_id
+      where gm1.user_id = auth.uid() and gm2.user_id = profiles.id
+    )
+  );
+
+-- garmin_tokens
+create policy "Users can only access their own tokens"
+  on public.garmin_tokens for all using (auth.uid() = user_id);
+
+-- groups
+create policy "Group members can view their groups"
+  on public.groups for select using (
+    exists (
+      select 1 from public.group_members
+      where group_id = groups.id and user_id = auth.uid()
+    )
+  );
+
+create policy "Users can create groups"
+  on public.groups for insert with check (auth.uid() = owner_id);
+
+create policy "Group owners can update their groups"
+  on public.groups for update using (auth.uid() = owner_id);
+
+-- group_members
+create policy "Users can view memberships in their groups"
+  on public.group_members for select using (
+    user_id = auth.uid() or
+    exists (
+      select 1 from public.group_members gm
+      where gm.group_id = group_members.group_id and gm.user_id = auth.uid()
+    )
+  );
+
+create policy "Users can join groups"
+  on public.group_members for insert with check (auth.uid() = user_id);
+
+create policy "Users can leave groups"
+  on public.group_members for delete using (auth.uid() = user_id);
+
+-- health_snapshots
 create policy "Users can view their own snapshots"
   on public.health_snapshots for select using (auth.uid() = user_id);
 
@@ -135,7 +138,6 @@ create policy "Users can insert their own snapshots"
 create policy "Users can update their own snapshots"
   on public.health_snapshots for update using (auth.uid() = user_id);
 
--- Group members can view each other's snapshots
 create policy "Group members can view each other's snapshots"
   on public.health_snapshots for select using (
     exists (
@@ -145,7 +147,10 @@ create policy "Group members can view each other's snapshots"
     )
   );
 
--- Auto-create profile on signup
+-- ============================================================
+-- FUNCTIONS & TRIGGERS
+-- ============================================================
+
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
@@ -164,7 +169,6 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
--- Updated_at trigger
 create or replace function public.set_updated_at()
 returns trigger as $$
 begin

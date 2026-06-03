@@ -38,7 +38,12 @@ export async function POST(request: NextRequest) {
       displayName: tokens.profile?.displayName,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to connect Garmin';
+    let message = error instanceof Error ? error.message : 'Failed to connect Garmin';
+    if (message.includes('429') || message.includes('status code 429')) {
+      message = 'Garmin is rate-limiting requests. Please wait 30-60 minutes and try again.';
+    } else if (message.includes('401') || message.includes('Unauthorized')) {
+      message = 'Invalid Garmin credentials. Please check your email and password.';
+    }
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
