@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ArrowClockwise,
   Steps,
@@ -127,6 +128,7 @@ export default function DashboardClient({
   weekSnapshots: Snapshot[];
   userId: string;
 }) {
+  const router = useRouter();
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
 
@@ -137,14 +139,23 @@ export default function DashboardClient({
   async function syncToday() {
     setSyncing(true);
     setSyncMsg('');
-    const res = await fetch('/api/garmin/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-    const d = await res.json();
-    setSyncing(false);
-    setSyncMsg(res.ok ? 'Synced - refresh to see latest.' : (d.error ?? 'Sync failed'));
+    try {
+      const res = await fetch('/api/garmin/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const d = await res.json();
+      if (res.ok) {
+        window.location.href = '/dashboard';
+      } else {
+        setSyncing(false);
+        setSyncMsg(d.error ?? 'Sync failed');
+      }
+    } catch {
+      setSyncing(false);
+      setSyncMsg('Network error - try again');
+    }
   }
 
   const t = todaySnapshot;
@@ -183,7 +194,7 @@ export default function DashboardClient({
               {syncMsg}
             </span>
           )}
-          <button onClick={syncToday} disabled={syncing || !profile?.garmin_connected}
+          <button onClick={syncToday} disabled={syncing}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium cursor-pointer disabled:opacity-40"
             style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)', boxShadow: 'var(--shadow-sm)' }}>
             <ArrowClockwise size={15} className={syncing ? 'animate-spin' : ''} />

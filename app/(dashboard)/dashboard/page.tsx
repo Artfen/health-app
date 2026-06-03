@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import DashboardClient from '@/components/dashboard/DashboardClient';
+
+export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -10,7 +13,9 @@ export default async function DashboardPage() {
   const today = new Date().toISOString().split('T')[0]!;
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]!;
 
-  const { data: snapshots } = await supabase
+  const admin = createAdminClient();
+
+  const { data: snapshots } = await admin
     .from('health_snapshots')
     .select('*')
     .eq('user_id', user.id)
@@ -18,7 +23,7 @@ export default async function DashboardPage() {
     .lte('date', today)
     .order('date', { ascending: true });
 
-  const { data: profile } = await supabase
+  const { data: profile } = await admin
     .from('profiles')
     .select('*')
     .eq('id', user.id)

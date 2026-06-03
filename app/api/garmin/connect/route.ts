@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { GarminClient } from '@/lib/garmin/garmin-client';
 import { createSupabaseTokenStorage } from '@/lib/supabase/token-storage';
 
@@ -21,29 +22,36 @@ export async function POST(request: NextRequest) {
     const storage = createSupabaseTokenStorage(user.id);
     const client = new GarminClient(garminEmail, garminPassword, storage);
 
-    // Trigger auth by fetching today's summary
-    const today = new Date().toISOString().split('T')[0]!;
-    await client.getDailySummary(today);
+    // Auth only - fetch activities (light call that triggers full auth + profile)
+    await client.getActivities(1, 0);
 
     const tokens = client.tokens;
+    const displayName = tokens.profile?.displayName ?? garminEmail.split('@')[0];
 
-    // Update profile to mark Garmin as connected
-    await supabase.from('profiles').update({
+    // Use admin client to bypass RLS for profile update
+    const admin = createAdminClient();
+    await admin.from('profiles').update({
       garmin_connected: true,
-      garmin_display_name: tokens.profile?.displayName ?? null,
+      garmin_display_name: displayName,
     }).eq('id', user.id);
 
-    return NextResponse.json({
-      success: true,
-      displayName: tokens.profile?.displayName,
-    });
+    // Kick off a background sync (non-blocking)
+    const today = new Date().toISOString().split('T')[0]!;
+    client.getDailySummary(today).catch(() => {});
+
+    return NextResponse.json({ success: true, displayName });
   } catch (error: unknown) {
-    let message = error instanceof Error ? error.message : 'Failed to connect Garmin';
-    if (message.includes('429') || message.includes('status code 429')) {
+    const raw = error instanceof Error ? error.message : String(error);
+    console.error('[garmin/connect] error:', raw);
+
+    let message = raw;
+    if (raw.includes('429')) {
       message = 'Garmin is rate-limiting requests. Please wait 30-60 minutes and try again.';
-    } else if (message.includes('401') || message.includes('Unauthorized')) {
+    } else if (raw.includes('401') || raw.toLowerCase().includes('unauthorized')) {
       message = 'Invalid Garmin credentials. Please check your email and password.';
+    } else if (raw.includes('CSRF') || raw.includes('ticket')) {
+      message = 'Garmin login page changed or is temporarily unavailable. Try again in a few minutes.';
     }
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: message, debug: raw }, { status: 400 });
   }
 }

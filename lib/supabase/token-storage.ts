@@ -1,10 +1,10 @@
 import type { TokenStorage, StoredTokens } from '@/lib/garmin/garmin-auth';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export function createSupabaseTokenStorage(userId: string): TokenStorage {
   return {
     async load(): Promise<StoredTokens> {
-      const supabase = await createClient();
+      const supabase = createAdminClient();
       const { data } = await supabase
         .from('garmin_tokens')
         .select('oauth1_token, oauth2_token, garmin_profile')
@@ -23,7 +23,7 @@ export function createSupabaseTokenStorage(userId: string): TokenStorage {
     },
 
     async save(tokens: StoredTokens): Promise<void> {
-      const supabase = await createClient();
+      const supabase = createAdminClient();
       await supabase.from('garmin_tokens').upsert({
         user_id: userId,
         oauth1_token: tokens.oauth1Token,
