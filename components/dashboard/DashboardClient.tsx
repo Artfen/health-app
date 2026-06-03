@@ -6,21 +6,24 @@ import {
   Steps,
   Moon,
   Heartbeat,
-  Lightning,
   BatteryFull,
+  Lightning,
   Flame,
   Timer,
   WifiHigh,
+  TrendUp,
+  TrendDown,
 } from '@phosphor-icons/react';
 import Link from 'next/link';
 import {
-  AreaChart,
-  Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  Cell,
 } from 'recharts';
 
 type Snapshot = {
@@ -42,11 +45,7 @@ type Snapshot = {
   active_seconds: number | null;
 };
 
-type Profile = {
-  full_name: string | null;
-  email: string;
-  garmin_connected: boolean;
-} | null;
+type Profile = { full_name: string | null; email: string; garmin_connected: boolean } | null;
 
 function fmtSleep(seconds: number | null) {
   if (!seconds) return '--';
@@ -55,69 +54,73 @@ function fmtSleep(seconds: number | null) {
   return `${h}h ${m}m`;
 }
 
-function fmtDate(dateStr: string) {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-}
-
 function fmtShortDate(dateStr: string) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
 }
 
-type MetricCardProps = {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  sub?: string;
-  color: string;
+function fmtDate(dateStr: string) {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
+}
+
+const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-lg px-2.5 py-1.5 text-xs font-medium"
+      style={{ background: 'var(--text-1)', color: '#fff' }}>
+      <p className="opacity-60 text-[10px] mb-0.5">{label}</p>
+      <p>{payload[0]?.value?.toLocaleString()}</p>
+    </div>
+  );
 };
 
-function MetricCard({ icon, label, value, sub, color }: MetricCardProps) {
+function StatCard({ label, value, sub, trend, accent, icon }: {
+  label: string; value: string; sub: string; trend?: number | null; accent?: boolean; icon: React.ReactNode;
+}) {
+  const up = trend != null && trend > 0;
+  const down = trend != null && trend < 0;
   return (
-    <div
-      className="rounded-2xl p-5 flex flex-col gap-3 transition-all hover:scale-[1.01]"
-      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
-    >
+    <div className="rounded-2xl p-5 flex flex-col gap-3"
+      style={{
+        background: accent ? 'var(--accent)' : 'var(--surface)',
+        boxShadow: 'var(--shadow-sm)',
+        border: accent ? 'none' : '1px solid var(--border)',
+      }}>
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+        <span className="text-xs font-medium" style={{ color: accent ? 'rgba(255,255,255,0.7)' : 'var(--text-2)' }}>
           {label}
         </span>
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${color}18` }}>
-          <span style={{ color }}>{icon}</span>
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+          style={{ background: accent ? 'rgba(255,255,255,0.18)' : 'var(--surface-2)', color: accent ? '#fff' : 'var(--accent)' }}>
+          {icon}
         </div>
       </div>
       <div>
-        <p className="text-3xl font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+        <p className="text-2xl font-bold tracking-tight" style={{ color: accent ? '#fff' : 'var(--text-1)' }}>
           {value}
         </p>
-        {sub && (
-          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+        <div className="flex items-center gap-1.5 mt-1">
+          {trend != null && (
+            <span className="flex items-center gap-0.5 text-xs font-semibold"
+              style={{ color: accent ? 'rgba(255,255,255,0.85)' : up ? 'var(--green)' : down ? 'var(--red)' : 'var(--text-3)' }}>
+              {up ? <TrendUp size={11} /> : down ? <TrendDown size={11} /> : null}
+              {Math.abs(trend)}%
+            </span>
+          )}
+          <span className="text-xs" style={{ color: accent ? 'rgba(255,255,255,0.55)' : 'var(--text-3)' }}>
             {sub}
-          </p>
-        )}
+          </span>
+        </div>
       </div>
     </div>
   );
 }
-
-const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string; color: string }>; label?: string }) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-xl px-3 py-2.5 text-sm" style={{ background: 'var(--surface-elevated)', border: '1px solid var(--border-strong)' }}>
-      <p className="font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>{label}</p>
-      {payload.map((p) => (
-        <p key={p.name} style={{ color: p.color }}>
-          {p.name}: <span className="font-semibold">{p.value?.toLocaleString()}</span>
-        </p>
-      ))}
-    </div>
-  );
-};
 
 export default function DashboardClient({
   profile,
   todaySnapshot,
   weekSnapshots,
-  userId,
 }: {
   profile: Profile;
   todaySnapshot: Snapshot | null;
@@ -125,203 +128,258 @@ export default function DashboardClient({
   userId: string;
 }) {
   const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState('');
+  const [syncMsg, setSyncMsg] = useState('');
 
   const name = profile?.full_name?.split(' ')[0] ?? 'Athlete';
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
   async function syncToday() {
     setSyncing(true);
-    setSyncMessage('');
+    setSyncMsg('');
     const res = await fetch('/api/garmin/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     });
-    const data = await res.json();
+    const d = await res.json();
     setSyncing(false);
-    if (res.ok) {
-      setSyncMessage('Synced! Refresh to see latest data.');
-    } else {
-      setSyncMessage(data.error ?? 'Sync failed');
-    }
+    setSyncMsg(res.ok ? 'Synced - refresh to see latest.' : (d.error ?? 'Sync failed'));
   }
+
+  const t = todaySnapshot;
+  const prevSnap = weekSnapshots[weekSnapshots.length - 2] ?? null;
+
+  const stepsTrend = t?.steps && prevSnap?.steps
+    ? Math.round(((t.steps - prevSnap.steps) / prevSnap.steps) * 100) : null;
+  const sleepTrend = t?.sleep_seconds && prevSnap?.sleep_seconds
+    ? Math.round(((t.sleep_seconds - prevSnap.sleep_seconds) / prevSnap.sleep_seconds) * 100) : null;
 
   const chartData = weekSnapshots.map((s) => ({
     date: fmtShortDate(s.date),
-    Steps: s.steps ?? 0,
-    Sleep: s.sleep_seconds ? Math.round(s.sleep_seconds / 3600 * 10) / 10 : 0,
-    HRV: s.hrv_last_night ?? 0,
-    Battery: s.body_battery_high ?? 0,
+    steps: s.steps ?? 0,
+    hrv: s.hrv_last_night ? Math.round(s.hrv_last_night) : 0,
+    sleep: s.sleep_seconds ? Math.round(s.sleep_seconds / 3600 * 10) / 10 : 0,
+    battery: s.body_battery_high ?? 0,
   }));
 
-  const t = todaySnapshot;
-
   return (
-    <div className="px-6 py-8 pb-24 lg:pb-8 max-w-6xl mx-auto">
+    <div className="px-6 py-6 pb-24 lg:pb-8 max-w-[1280px] mx-auto">
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-start justify-between mb-7">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-            Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {name}
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>
+            {greeting}, {name}
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-            {fmtDate(new Date().toISOString().split('T')[0]!)}
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>
+            Stay on top of your recovery and training load.
           </p>
         </div>
-        <button
-          onClick={syncToday}
-          disabled={syncing || !profile?.garmin_connected}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer disabled:opacity-40"
-          style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', color: 'var(--text-secondary)' }}
-        >
-          <ArrowClockwise size={16} className={syncing ? 'animate-spin' : ''} />
-          {syncing ? 'Syncing...' : 'Sync now'}
-        </button>
+        <div className="flex items-center gap-2">
+          {syncMsg && (
+            <span className="text-xs px-3 py-1.5 rounded-lg hidden sm:block"
+              style={{ background: 'var(--surface)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
+              {syncMsg}
+            </span>
+          )}
+          <button onClick={syncToday} disabled={syncing || !profile?.garmin_connected}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium cursor-pointer disabled:opacity-40"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)', boxShadow: 'var(--shadow-sm)' }}>
+            <ArrowClockwise size={15} className={syncing ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">Sync now</span>
+          </button>
+        </div>
       </div>
 
-      {syncMessage && (
-        <p className="text-sm mb-4 px-4 py-3 rounded-xl" style={{ background: 'var(--surface)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
-          {syncMessage}
-        </p>
-      )}
-
-      {/* Garmin not connected banner */}
+      {/* Garmin connect banner */}
       {!profile?.garmin_connected && (
-        <div className="flex items-center justify-between rounded-2xl px-5 py-4 mb-8" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+        <div className="flex items-center justify-between rounded-2xl px-5 py-4 mb-6"
+          style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
           <div className="flex items-center gap-3">
-            <WifiHigh size={20} style={{ color: '#f59e0b' }} />
+            <WifiHigh size={20} style={{ color: 'var(--amber)' }} />
             <div>
-              <p className="text-sm font-medium" style={{ color: '#f59e0b' }}>Garmin not connected</p>
-              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Connect your Garmin to start seeing data</p>
+              <p className="text-sm font-semibold" style={{ color: '#92400e' }}>Connect your Garmin Fenix</p>
+              <p className="text-xs mt-0.5" style={{ color: '#b45309' }}>Link your account to start syncing health data</p>
             </div>
           </div>
-          <Link
-            href="/onboarding"
-            className="px-4 py-2 rounded-xl text-xs font-semibold"
-            style={{ background: '#f59e0b', color: '#1a1a00' }}
-          >
+          <Link href="/onboarding"
+            className="px-4 py-2 rounded-xl text-xs font-bold"
+            style={{ background: 'var(--amber)', color: '#fff' }}>
             Connect
           </Link>
         </div>
       )}
 
-      {/* Metric cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <MetricCard
-          icon={<Steps size={18} />}
-          label="Steps"
-          value={t?.steps?.toLocaleString() ?? '--'}
-          sub="goal: 10,000"
-          color="#6366f1"
-        />
-        <MetricCard
-          icon={<Moon size={18} />}
-          label="Sleep"
-          value={fmtSleep(t?.sleep_seconds ?? null)}
-          sub={t?.sleep_score ? `Score ${t.sleep_score}` : undefined}
-          color="#818cf8"
-        />
-        <MetricCard
-          icon={<Heartbeat size={18} />}
-          label="HRV"
-          value={t?.hrv_last_night ? `${Math.round(t.hrv_last_night)} ms` : '--'}
-          sub={t?.hrv_status ?? undefined}
-          color="#22c55e"
-        />
-        <MetricCard
-          icon={<BatteryFull size={18} />}
-          label="Body Battery"
-          value={t?.body_battery_high ? `${t.body_battery_high}` : '--'}
-          sub={t?.body_battery_low ? `Low: ${t.body_battery_low}` : undefined}
-          color="#f59e0b"
-        />
-        <MetricCard
-          icon={<Lightning size={18} />}
-          label="Stress"
-          value={t?.avg_stress ? `${t.avg_stress}` : '--'}
-          sub="avg today"
-          color="#ef4444"
-        />
-        <MetricCard
-          icon={<Flame size={18} />}
-          label="Calories"
-          value={t?.calories?.toLocaleString() ?? '--'}
-          sub={t?.active_calories ? `${t.active_calories} active` : undefined}
-          color="#f97316"
-        />
-        <MetricCard
-          icon={<Heartbeat size={18} weight="fill" />}
-          label="Resting HR"
-          value={t?.resting_hr ? `${t.resting_hr} bpm` : '--'}
-          sub="resting"
-          color="#ec4899"
-        />
-        <MetricCard
-          icon={<Timer size={18} />}
-          label="Active Time"
-          value={t?.active_seconds ? `${Math.floor(t.active_seconds / 60)} min` : '--'}
-          sub="today"
-          color="#06b6d4"
-        />
+      {/* Grid */}
+      <div className="grid grid-cols-12 gap-5">
+
+        {/* Left: stats + charts */}
+        <div className="col-span-12 lg:col-span-8 flex flex-col gap-5">
+
+          {/* 4 stat cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <StatCard label="Steps Today" value={t?.steps?.toLocaleString() ?? '--'} sub="goal: 10k"
+              trend={stepsTrend} accent icon={<Steps size={16} />} />
+            <StatCard label="Sleep" value={fmtSleep(t?.sleep_seconds ?? null)}
+              sub={t?.sleep_score ? `Score ${t.sleep_score}` : 'last night'} trend={sleepTrend} icon={<Moon size={16} />} />
+            <StatCard label="HRV" value={t?.hrv_last_night ? `${Math.round(t.hrv_last_night)} ms` : '--'}
+              sub={t?.hrv_status ?? 'last night'} icon={<Heartbeat size={16} />} />
+            <StatCard label="Body Battery" value={t?.body_battery_high ? `${t.body_battery_high}` : '--'}
+              sub={t?.body_battery_low != null ? `Low: ${t.body_battery_low}` : 'peak today'} icon={<BatteryFull size={16} />} />
+          </div>
+
+          {/* Steps bar chart */}
+          <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Daily Steps</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Last 7 days</p>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-3)' }}>
+                <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--accent)' }} />
+                Today
+                <span className="w-2.5 h-2.5 rounded-sm inline-block ml-2" style={{ background: 'var(--border)' }} />
+                Previous
+              </div>
+            </div>
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={165}>
+                <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }} barSize={32}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: 'var(--text-3)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: 'var(--text-3)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--surface-2)', radius: 6 }} />
+                  <Bar dataKey="steps" radius={[6, 6, 0, 0]}>
+                    {chartData.map((_, i) => (
+                      <Cell key={i} fill={i === chartData.length - 1 ? 'var(--accent)' : '#e2e3eb'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-40 flex items-center justify-center rounded-xl" style={{ background: 'var(--surface-2)' }}>
+                <p className="text-sm" style={{ color: 'var(--text-3)' }}>Sync to see your step history</p>
+              </div>
+            )}
+          </div>
+
+          {/* HRV + Sleep mini charts */}
+          <div className="grid grid-cols-2 gap-4">
+            <MiniChart title="HRV - 7 days" data={chartData} dataKey="hrv" color="#16a34a" unit="ms" />
+            <MiniChart title="Sleep - 7 days" data={chartData} dataKey="sleep" color="#6366f1" unit="hrs" />
+          </div>
+        </div>
+
+        {/* Right column */}
+        <div className="col-span-12 lg:col-span-4 flex flex-col gap-5">
+
+          {/* Today detail list */}
+          <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+            <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text-1)' }}>Today</p>
+            <div className="flex flex-col">
+              {[
+                { icon: <Lightning size={14} />, label: 'Avg Stress', value: t?.avg_stress ? `${t.avg_stress}` : '--', color: '#e8521c' },
+                { icon: <Flame size={14} />, label: 'Calories', value: t?.calories?.toLocaleString() ?? '--', color: '#f97316' },
+                { icon: <Heartbeat size={14} />, label: 'Resting HR', value: t?.resting_hr ? `${t.resting_hr} bpm` : '--', color: '#ec4899' },
+                { icon: <Timer size={14} />, label: 'Active time', value: t?.active_seconds ? `${Math.floor(t.active_seconds / 60)} min` : '--', color: '#06b6d4' },
+                { icon: <Steps size={14} />, label: 'Distance', value: t?.distance_meters ? `${(t.distance_meters / 1000).toFixed(1)} km` : '--', color: '#8b5cf6' },
+              ].map(({ icon, label, value, color }, i, arr) => (
+                <div key={label} className="flex items-center justify-between py-3"
+                  style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+                      style={{ background: `${color}18`, color }}>
+                      {icon}
+                    </div>
+                    <span className="text-sm" style={{ color: 'var(--text-2)' }}>{label}</span>
+                  </div>
+                  <span className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Body battery gauge */}
+          <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Body Battery</p>
+              <BatteryFull size={16} style={{ color: 'var(--accent)' }} />
+            </div>
+            <div className="flex items-baseline gap-2 mb-3">
+              <p className="text-4xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>
+                {t?.body_battery_high ?? '--'}
+              </p>
+              {t?.body_battery_high && (
+                <p className="text-sm" style={{ color: 'var(--text-3)' }}>/ 100</p>
+              )}
+            </div>
+            {t?.body_battery_high != null && (
+              <>
+                <div className="h-2 rounded-full overflow-hidden mb-2" style={{ background: 'var(--border)' }}>
+                  <div className="h-full rounded-full"
+                    style={{
+                      width: `${t.body_battery_high}%`,
+                      background: t.body_battery_high > 70 ? 'var(--green)'
+                        : t.body_battery_high > 40 ? 'var(--amber)' : 'var(--red)',
+                    }} />
+                </div>
+                {t.body_battery_low != null && (
+                  <div className="flex justify-between text-xs" style={{ color: 'var(--text-3)' }}>
+                    <span>Low: {t.body_battery_low}</span>
+                    <span>Peak: {t.body_battery_high}</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Quick nav tiles */}
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { href: '/activities', label: 'Activities', desc: 'Training log', color: 'var(--accent)' },
+              { href: '/sleep', label: 'Sleep', desc: 'Recovery', color: '#6366f1' },
+              { href: '/group', label: 'Group', desc: 'Compete', color: '#16a34a' },
+              { href: '/onboarding', label: 'Garmin', desc: 'Connect', color: '#d97706' },
+            ].map(({ href, label, desc, color }) => (
+              <Link key={href} href={href}
+                className="rounded-xl p-4 flex flex-col gap-1 transition-colors"
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                <div className="w-6 h-1 rounded-full mb-1" style={{ background: color }} />
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{label}</p>
+                <p className="text-xs" style={{ color: 'var(--text-3)' }}>{desc}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
       </div>
-
-      {/* Charts */}
-      {chartData.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ChartCard title="Steps - 7 days" dataKey="Steps" data={chartData} color="#6366f1" unit="steps" />
-          <ChartCard title="Sleep - 7 days" dataKey="Sleep" data={chartData} color="#818cf8" unit="hrs" />
-          <ChartCard title="HRV - 7 days" dataKey="HRV" data={chartData} color="#22c55e" unit="ms" />
-          <ChartCard title="Body Battery Peak - 7 days" dataKey="Battery" data={chartData} color="#f59e0b" unit="" />
-        </div>
-      )}
-
-      {chartData.length === 0 && profile?.garmin_connected && (
-        <div className="rounded-2xl p-10 text-center" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>No data yet</p>
-          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Hit "Sync now" to pull your latest Garmin data.</p>
-        </div>
-      )}
     </div>
   );
 }
 
-function ChartCard({
-  title,
-  dataKey,
-  data,
-  color,
-  unit,
-}: {
+function MiniChart({ title, data, dataKey, color, unit }: {
   title: string;
-  dataKey: string;
   data: Array<Record<string, string | number>>;
+  dataKey: string;
   color: string;
   unit: string;
 }) {
   return (
-    <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-      <p className="text-sm font-medium mb-5" style={{ color: 'var(--text-primary)' }}>{title}</p>
-      <ResponsiveContainer width="100%" height={180}>
-        <AreaChart data={data} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-          <defs>
-            <linearGradient id={`grad-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={color} stopOpacity={0.3} />
-              <stop offset="95%" stopColor={color} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-          <XAxis dataKey="date" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
-          <Tooltip content={<CustomTooltip />} />
-          <Area
-            type="monotone"
-            dataKey={dataKey}
-            stroke={color}
-            strokeWidth={2}
-            fill={`url(#grad-${dataKey})`}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+    <div className="rounded-2xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+      <p className="text-xs font-semibold mb-3" style={{ color: 'var(--text-2)' }}>{title}</p>
+      {data.length > 0 ? (
+        <ResponsiveContainer width="100%" height={75}>
+          <BarChart data={data} margin={{ top: 0, right: 0, left: -32, bottom: 0 }} barSize={14}>
+            <XAxis dataKey="date" tick={{ fill: 'var(--text-3)', fontSize: 10 }} axisLine={false} tickLine={false} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--surface-2)' }} />
+            <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="h-[75px] flex items-center justify-center">
+          <p className="text-xs" style={{ color: 'var(--text-3)' }}>No data</p>
+        </div>
+      )}
     </div>
   );
 }

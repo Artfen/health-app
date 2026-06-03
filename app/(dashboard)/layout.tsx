@@ -15,9 +15,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .single();
 
   return (
-    <div className="flex min-h-[100dvh]" style={{ background: 'var(--background)' }}>
+    <div className="flex min-h-[100dvh]" style={{ background: 'var(--bg)' }}>
       <Sidebar user={profile} />
-      <main className="flex-1 overflow-auto lg:ml-64">
+      <main className="flex-1 overflow-auto lg:ml-16">
         {children}
       </main>
     </div>

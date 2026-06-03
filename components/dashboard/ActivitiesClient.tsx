@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Pulse, MapPin, Timer, Flame, Heartbeat, ArrowsClockwise } from '@phosphor-icons/react';
+import { ArrowsClockwise, MagnifyingGlass, Funnel, DotsThree } from '@phosphor-icons/react';
 import type { Activity as GarminActivity } from '@/lib/garmin/garmin-client';
 
 type Profile = { garmin_connected: boolean; full_name: string | null; email: string } | null;
@@ -9,33 +9,33 @@ type Profile = { garmin_connected: boolean; full_name: string | null; email: str
 function formatDuration(seconds: number) {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
   if (h > 0) return `${h}h ${m}m`;
-  return `${m}m ${s}s`;
+  return `${m}m`;
 }
 
-function formatPace(metersPerSecond: number) {
-  if (!metersPerSecond) return '--';
-  const minPerKm = 1000 / metersPerSecond / 60;
-  const min = Math.floor(minPerKm);
-  const sec = Math.round((minPerKm - min) * 60);
-  return `${min}:${sec.toString().padStart(2, '0')} /km`;
-}
-
-const ACTIVITY_ICONS: Record<string, string> = {
-  running: '🏃',
-  cycling: '🚴',
-  swimming: '🏊',
-  hiking: '🥾',
-  strength_training: '🏋️',
-  yoga: '🧘',
-  walking: '🚶',
+const TYPE_EMOJI: Record<string, string> = {
+  running: '🏃', cycling: '🚴', swimming: '🏊', hiking: '🥾',
+  strength_training: '🏋️', yoga: '🧘', walking: '🚶', trail_running: '🏔️',
 };
+
+const TYPE_LABEL: Record<string, string> = {
+  running: 'Running', cycling: 'Cycling', swimming: 'Swimming',
+  hiking: 'Hiking', strength_training: 'Strength', yoga: 'Yoga',
+  walking: 'Walking', trail_running: 'Trail Run',
+};
+
+function fmtDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
 
 export default function ActivitiesClient({ profile }: { profile: Profile }) {
   const [activities, setActivities] = useState<GarminActivity[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
 
   async function fetchActivities() {
     setLoading(true);
@@ -51,91 +51,147 @@ export default function ActivitiesClient({ profile }: { profile: Profile }) {
     if (profile?.garmin_connected) fetchActivities();
   }, [profile?.garmin_connected]);
 
+  const filtered = activities.filter((a) =>
+    a.activityName.toLowerCase().includes(search.toLowerCase()) ||
+    (TYPE_LABEL[a.activityType?.typeKey] ?? '').toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
-    <div className="px-6 py-8 pb-24 lg:pb-8 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
+    <div className="px-6 py-6 pb-24 lg:pb-8 max-w-[1280px] mx-auto">
+
+      {/* Header */}
+      <div className="flex items-start justify-between mb-7">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>Activities</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>Your recent training sessions</p>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>Activities</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>Your recent training sessions</p>
         </div>
-        <button
-          onClick={fetchActivities}
-          disabled={loading}
+        <button onClick={fetchActivities} disabled={loading}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium cursor-pointer disabled:opacity-40"
-          style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', color: 'var(--text-secondary)' }}
-        >
-          <ArrowsClockwise size={16} className={loading ? 'animate-spin' : ''} />
-          {loading ? 'Loading...' : 'Refresh'}
+          style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)', boxShadow: 'var(--shadow-sm)' }}>
+          <ArrowsClockwise size={15} className={loading ? 'animate-spin' : ''} />
+          Refresh
         </button>
       </div>
 
-      {error && (
-        <p className="text-sm px-4 py-3 rounded-xl mb-4" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}>
-          {error}
-        </p>
-      )}
+      {/* Table card */}
+      <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
 
-      {activities.length === 0 && !loading && (
-        <div className="rounded-2xl p-12 text-center" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <Pulse size={32} className="mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
-          <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>No activities loaded</p>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>Click refresh to fetch your Garmin activities.</p>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-3">
-        {activities.map((a) => {
-          const typeKey = a.activityType?.typeKey ?? 'running';
-          const emoji = ACTIVITY_ICONS[typeKey] ?? '🏅';
-          return (
-            <div
-              key={a.activityId}
-              className="rounded-2xl p-5 transition-all hover:border-opacity-30"
-              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{emoji}</span>
-                  <div>
-                    <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{a.activityName}</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                      {new Date(a.startTimeLocal).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                    </p>
-                  </div>
-                </div>
-                <span className="text-xs px-2.5 py-1 rounded-full capitalize" style={{ background: 'var(--surface-elevated)', color: 'var(--text-secondary)' }}>
-                  {typeKey.replace('_', ' ')}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {a.distance > 0 && (
-                  <Stat icon={<MapPin size={13} />} label="Distance" value={`${(a.distance / 1000).toFixed(2)} km`} />
-                )}
-                <Stat icon={<Timer size={13} />} label="Duration" value={formatDuration(a.duration)} />
-                {a.calories > 0 && (
-                  <Stat icon={<Flame size={13} />} label="Calories" value={a.calories.toLocaleString()} />
-                )}
-                {a.averageHR > 0 && (
-                  <Stat icon={<Heartbeat size={13} />} label="Avg HR" value={`${Math.round(a.averageHR)} bpm`} />
-                )}
-              </div>
+        {/* Table toolbar */}
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+          <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+            Recent Activities
+            <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-3)' }}>
+              {filtered.length} sessions
+            </span>
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
+              style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+              <MagnifyingGlass size={14} style={{ color: 'var(--text-3)' }} />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search"
+                className="text-sm outline-none w-36 bg-transparent"
+                style={{ color: 'var(--text-1)' }}
+              />
             </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+            <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm cursor-pointer"
+              style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+              <Funnel size={14} />
+              Filter
+            </button>
+          </div>
+        </div>
 
-function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <div className="flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
-        {icon}
-        <span className="text-xs">{label}</span>
+        {error && (
+          <div className="px-5 py-3 text-sm" style={{ background: 'var(--red-bg)', color: 'var(--red)' }}>
+            {error}
+          </div>
+        )}
+
+        {/* Table head */}
+        <div className="grid grid-cols-12 px-5 py-3 text-xs font-medium" style={{ color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>
+          <div className="col-span-1" />
+          <div className="col-span-3">Activity</div>
+          <div className="col-span-2 text-right">Distance</div>
+          <div className="col-span-2 text-right">Duration</div>
+          <div className="col-span-2 text-right">Calories</div>
+          <div className="col-span-2 text-right">Date</div>
+        </div>
+
+        {/* Table rows */}
+        {filtered.length === 0 && !loading ? (
+          <div className="px-5 py-12 text-center">
+            <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>
+              {search ? 'No matching activities' : 'No activities loaded'}
+            </p>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
+              {!search && 'Click Refresh to fetch your Garmin activities'}
+            </p>
+          </div>
+        ) : (
+          filtered.map((a, i) => {
+            const typeKey = a.activityType?.typeKey ?? 'running';
+            const emoji = TYPE_EMOJI[typeKey] ?? '🏅';
+            const label = TYPE_LABEL[typeKey] ?? typeKey.replace('_', ' ');
+
+            return (
+              <div key={a.activityId}
+                className="grid grid-cols-12 items-center px-5 py-3.5 transition-colors"
+                style={{
+                  borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none',
+                  cursor: 'default',
+                }}>
+                {/* Type badge */}
+                <div className="col-span-1">
+                  <span className="text-lg leading-none">{emoji}</span>
+                </div>
+
+                {/* Name + type */}
+                <div className="col-span-3 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: 'var(--text-1)' }}>
+                    {a.activityName}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{label}</p>
+                </div>
+
+                {/* Distance */}
+                <div className="col-span-2 text-right">
+                  <span className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>
+                    {a.distance > 0 ? `${(a.distance / 1000).toFixed(2)} km` : '--'}
+                  </span>
+                </div>
+
+                {/* Duration */}
+                <div className="col-span-2 text-right">
+                  <span className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>
+                    {formatDuration(a.duration)}
+                  </span>
+                </div>
+
+                {/* Calories */}
+                <div className="col-span-2 text-right">
+                  <span className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>
+                    {a.calories > 0 ? a.calories.toLocaleString() : '--'}
+                  </span>
+                </div>
+
+                {/* Date */}
+                <div className="col-span-2 text-right flex items-center justify-end gap-2">
+                  <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+                    {fmtDate(a.startTimeLocal)}
+                  </span>
+                  <button className="p-1 rounded cursor-pointer" style={{ color: 'var(--text-3)' }}>
+                    <DotsThree size={16} />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
-      <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{value}</p>
     </div>
   );
 }

@@ -1,25 +1,45 @@
 @import "tailwindcss";
 
 :root {
-  --background: #08080f;
-  --surface: #0f0f1a;
-  --surface-elevated: #16162a;
-  --border: rgba(255, 255, 255, 0.07);
-  --border-strong: rgba(255, 255, 255, 0.13);
-  --text-primary: #ededf5;
-  --text-secondary: #8080a0;
-  --text-muted: #4a4a65;
-  --accent: #6366f1;
-  --accent-hover: #818cf8;
-  --accent-muted: rgba(99, 102, 241, 0.12);
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --danger: #ef4444;
+  /* Base */
+  --bg: #f2f3f7;
+  --surface: #ffffff;
+  --surface-2: #f7f8fb;
+  --border: #e8e9ef;
+  --border-strong: #d2d3de;
+
+  /* Text */
+  --text-1: #111116;
+  --text-2: #5c5d6e;
+  --text-3: #9899aa;
+
+  /* Accent - warm orange */
+  --accent: #e8521c;
+  --accent-hover: #d44516;
+  --accent-light: #fff1ec;
+
+  /* Status */
+  --green: #16a34a;
+  --green-bg: #f0fdf4;
+  --red: #dc2626;
+  --red-bg: #fef2f2;
+  --amber: #d97706;
+  --amber-bg: #fffbeb;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 4px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
+
+  /* Radii */
+  --r-sm: 8px;
+  --r: 12px;
+  --r-lg: 18px;
+  --r-xl: 24px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--text-primary);
+  --color-background: var(--bg);
+  --color-foreground: var(--text-1);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -27,8 +47,8 @@
 * { box-sizing: border-box; }
 
 body {
-  background: var(--background);
-  color: var(--text-primary);
+  background: var(--bg);
+  color: var(--text-1);
   -webkit-font-smoothing: antialiased;
 }
 
