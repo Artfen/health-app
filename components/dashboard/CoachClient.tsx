@@ -14,6 +14,78 @@ type Objective = {
 
 type Message = { role: 'user' | 'assistant'; content: string };
 
+function MarkdownMessage({ content, isUser }: { content: string; isUser: boolean }) {
+  if (isUser) return <span>{content}</span>;
+
+  // Parse markdown into paragraphs with inline bold/italic
+  const paragraphs = content.split(/\n{2,}/);
+
+  function renderInline(text: string) {
+    // Bold: **text** or __text__
+    // Italic: *text* or _text_
+    const parts: React.ReactNode[] = [];
+    let remaining = text;
+    let key = 0;
+    const pattern = /(\*\*|__)(.*?)\1|(\*|_)(.*?)\3/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>);
+      }
+      if (match[1]) {
+        parts.push(<strong key={key++} className="font-semibold">{match[2]}</strong>);
+      } else {
+        parts.push(<em key={key++}>{match[4]}</em>);
+      }
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < text.length) parts.push(<span key={key++}>{text.slice(lastIndex)}</span>);
+    return parts.length > 0 ? parts : text;
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {paragraphs.map((para, i) => {
+        const trimmed = para.trim();
+        if (!trimmed) return null;
+
+        // Bullet list
+        const lines = trimmed.split('\n');
+        const isList = lines.every(l => /^[-*•]\s/.test(l.trim()));
+        if (isList) {
+          return (
+            <ul key={i} className="flex flex-col gap-1.5 pl-1">
+              {lines.map((line, j) => (
+                <li key={j} className="flex gap-2 text-sm leading-relaxed">
+                  <span className="mt-[5px] w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }} />
+                  <span>{renderInline(line.replace(/^[-*•]\s/, ''))}</span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+
+        // Heading (### or ##)
+        if (/^#{1,3}\s/.test(trimmed)) {
+          return (
+            <p key={i} className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+              {renderInline(trimmed.replace(/^#{1,3}\s/, ''))}
+            </p>
+          );
+        }
+
+        return (
+          <p key={i} className="text-sm leading-relaxed">
+            {renderInline(trimmed)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 const PRESET_OBJECTIVES = [
   { title: 'Hyrox', description: 'Complete a Hyrox race — 8km running + 8 functional fitness stations' },
   { title: 'Marathon', description: 'Complete a 42.2km marathon' },
@@ -310,7 +382,7 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
                   : <Robot size={13} style={{ color: 'var(--accent)' }} weight="fill" />
                 }
               </div>
-              <div className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap`}
+              <div className="max-w-[75%] rounded-2xl px-4 py-3"
                 style={{
                   background: msg.role === 'user' ? 'var(--accent)' : 'var(--surface)',
                   color: msg.role === 'user' ? '#fff' : 'var(--text-1)',
@@ -318,13 +390,16 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
                   borderTopRightRadius: msg.role === 'user' ? 6 : undefined,
                   borderTopLeftRadius: msg.role === 'assistant' ? 6 : undefined,
                 }}>
-                {msg.content || (streaming && i === messages.length - 1 ? (
-                  <span className="flex gap-1">
-                    <span className="animate-bounce" style={{ animationDelay: '0ms' }}>•</span>
-                    <span className="animate-bounce" style={{ animationDelay: '150ms' }}>•</span>
-                    <span className="animate-bounce" style={{ animationDelay: '300ms' }}>•</span>
-                  </span>
-                ) : '')}
+                {msg.content
+                  ? <MarkdownMessage content={msg.content} isUser={msg.role === 'user'} />
+                  : (streaming && i === messages.length - 1 ? (
+                    <span className="flex gap-1">
+                      <span className="animate-bounce" style={{ animationDelay: '0ms' }}>•</span>
+                      <span className="animate-bounce" style={{ animationDelay: '150ms' }}>•</span>
+                      <span className="animate-bounce" style={{ animationDelay: '300ms' }}>•</span>
+                    </span>
+                  ) : '')
+                }
               </div>
             </div>
           ))}
