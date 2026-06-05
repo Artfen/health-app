@@ -21,10 +21,10 @@ async function syncTodayForUser(userId: string) {
       date: today,
       steps: summary.totalSteps ?? null,
       calories: summary.activeKilocalories ?? null,
-      resting_hr: summary.restingHeartRate ?? null,
+      resting_hr: summary.restingHeartRateValue ?? null,
       avg_stress: summary.averageStressLevel ?? null,
-      body_battery_high: summary.maxBodyBattery ?? null,
-      body_battery_low: summary.minBodyBattery ?? null,
+      body_battery_high: summary.bodyBatteryHighestValue ?? null,
+      body_battery_low: summary.bodyBatteryLowestValue ?? null,
       distance_meters: summary.totalDistanceMeters ?? null,
       active_seconds: summary.activeSeconds ?? null,
     }, { onConflict: 'user_id,date' });
