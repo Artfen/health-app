@@ -75,15 +75,15 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient();
 
-  const [{ data: snapshots }, { data: objectives }] = await Promise.all([
+  const [{ data: snapshots }, objectivesResult] = await Promise.all([
     admin.from('health_snapshots').select('*').eq('user_id', user.id)
       .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]!)
       .order('date', { ascending: true }),
     admin.from('objectives').select('*').eq('user_id', user.id).eq('status', 'active')
-      .order('created_at', { ascending: false }).limit(1),
+      .order('created_at', { ascending: false }).limit(1).then(r => r).catch(() => ({ data: null })),
   ]);
 
-  const activeObjective = objectives?.[0] ?? null;
+  const activeObjective = (objectivesResult as { data: unknown[] | null }).data?.[0] as { title: string; description?: string | null; target_date?: string | null } | null ?? null;
   const healthContext = buildHealthContext((snapshots ?? []) as Array<Record<string, unknown>>, activeObjective);
 
   const systemPrompt = `You are an expert personal health and fitness coach with deep knowledge of endurance sports, strength training, recovery science, and wearable data interpretation.
@@ -107,6 +107,7 @@ If they have an objective, every recommendation should move them toward it.`;
 
   const stream = new ReadableStream({
     async start(controller) {
+      try {
       const response = await anthropic.messages.create({
         model: 'claude-3-haiku-20240307',
         max_tokens: 1024,
@@ -121,6 +122,11 @@ If they have an objective, every recommendation should move them toward it.`;
         }
       }
       controller.close();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error from AI';
+        controller.enqueue(encoder.encode(`Sorry, I ran into an error: ${msg}`));
+        controller.close();
+      }
     },
   });
 
