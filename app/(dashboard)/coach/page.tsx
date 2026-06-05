@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 async function syncTodayForUser(userId: string) {
   try {
     const storage = createSupabaseTokenStorage(userId);
-    const tokens = await storage.getTokens();
+    const tokens = await storage.load();
     if (!tokens) return;
     const garmin = new GarminClient('', '', storage);
     const today = new Date().toISOString().split('T')[0]!;
