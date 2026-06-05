@@ -45,13 +45,11 @@ function buildHealthContext(snapshots: Array<Record<string, unknown>>, objective
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-  // Body battery context: current value estimated by how much has drained since peak
   const batteryPeak = today?.body_battery_high as number | null ?? null;
   const batteryLow = today?.body_battery_low as number | null ?? null;
-  const batteryDrained = batteryPeak && batteryLow ? batteryPeak - batteryLow : null;
-  const currentBatteryEstimate = batteryPeak && batteryDrained
-    ? `~${Math.max(batteryLow ?? 0, batteryPeak - Math.round(batteryDrained * Math.min(hour / 16, 1)))} (estimated current, peak was ${batteryPeak})`
-    : batteryPeak ? `${batteryPeak} (peak today)` : 'no data';
+  const currentBatteryEstimate = batteryPeak
+    ? `${batteryPeak} (today's peak), low so far: ${batteryLow ?? 'unknown'}`
+    : 'no data';
 
   const lines = [
     `## Current Time Context`,

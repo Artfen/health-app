@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { PaperPlaneTilt, Robot, User, Plus, Target, CheckCircle, Trash, CaretDown } from '@phosphor-icons/react';
+import { PaperPlaneTilt, Robot, User, Plus, Target, CheckCircle, Trash, CaretDown, ArrowCounterClockwise } from '@phosphor-icons/react';
 
 type Snapshot = Record<string, unknown>;
 type Objective = {
@@ -111,7 +111,13 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
   objectives: Objective[];
 }) {
   const [objectives, setObjectives] = useState<Objective[]>(initialObjectives);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const saved = localStorage.getItem('coach-messages');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [showObjectiveModal, setShowObjectiveModal] = useState(false);
@@ -129,6 +135,16 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (messages.length === 0) return;
+    try { localStorage.setItem('coach-messages', JSON.stringify(messages.slice(-40))); } catch {}
+  }, [messages]);
+
+  function clearChat() {
+    setMessages([]);
+    try { localStorage.removeItem('coach-messages'); } catch {}
+  }
 
   async function sendMessage(text?: string) {
     const content = text ?? input.trim();
@@ -334,12 +350,22 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
               </p>
             </div>
           </div>
-          <button onClick={() => setShowObjectiveModal(true)}
-            className="lg:hidden flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium cursor-pointer"
-            style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-            <Target size={13} />
-            {activeObjective ? activeObjective.title : 'Set goal'}
-          </button>
+          <div className="flex items-center gap-2">
+            {messages.length > 0 && (
+              <button onClick={clearChat} title="Clear chat"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium cursor-pointer"
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
+                <ArrowCounterClockwise size={13} />
+                <span className="hidden sm:inline">New chat</span>
+              </button>
+            )}
+            <button onClick={() => setShowObjectiveModal(true)}
+              className="lg:hidden flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium cursor-pointer"
+              style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+              <Target size={13} />
+              {activeObjective ? activeObjective.title : 'Set goal'}
+            </button>
+          </div>
         </div>
 
         {/* Messages */}
