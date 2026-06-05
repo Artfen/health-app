@@ -75,15 +75,16 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient();
 
-  const [{ data: snapshots }, objectivesResult] = await Promise.all([
-    admin.from('health_snapshots').select('*').eq('user_id', user.id)
-      .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]!)
-      .order('date', { ascending: true }),
-    admin.from('objectives').select('*').eq('user_id', user.id).eq('status', 'active')
-      .order('created_at', { ascending: false }).limit(1).then(r => r).catch(() => ({ data: null })),
-  ]);
+  const { data: snapshots } = await admin.from('health_snapshots').select('*').eq('user_id', user.id)
+    .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]!)
+    .order('date', { ascending: true });
 
-  const activeObjective = (objectivesResult as { data: unknown[] | null }).data?.[0] as { title: string; description?: string | null; target_date?: string | null } | null ?? null;
+  let activeObjective: { title: string; description?: string | null; target_date?: string | null } | null = null;
+  try {
+    const { data: objectives } = await admin.from('objectives').select('*').eq('user_id', user.id)
+      .eq('status', 'active').order('created_at', { ascending: false }).limit(1);
+    activeObjective = objectives?.[0] ?? null;
+  } catch { /* objectives table may not exist yet */ }
   const healthContext = buildHealthContext((snapshots ?? []) as Array<Record<string, unknown>>, activeObjective);
 
   const systemPrompt = `You are an expert personal health and fitness coach with deep knowledge of endurance sports, strength training, recovery science, and wearable data interpretation.
