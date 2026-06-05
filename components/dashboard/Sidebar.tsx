@@ -55,7 +55,8 @@ export default function Sidebar({ user }: { user: Profile }) {
                 key={href}
                 href={href}
                 title={label}
-                className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
+                prefetch={true}
+                className="nav-icon w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
                 style={{
                   background: active ? 'var(--accent)' : 'transparent',
                   color: active ? '#fff' : 'var(--text-3)',
