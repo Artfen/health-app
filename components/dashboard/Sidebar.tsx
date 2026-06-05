@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { House, Pulse, Moon, Users, SignOut, WifiHigh, Gear, Brain } from '@phosphor-icons/react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -19,6 +20,42 @@ const NAV = [
   { href: '/group', icon: Users, label: 'Group' },
   { href: '/coach', icon: Brain, label: 'AI Coach' },
 ];
+
+function SignOutButton({ onClick }: { onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button onClick={onClick} title="Sign out"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer transition-all duration-150"
+      style={{
+        background: hovered ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'transparent',
+        color: hovered ? 'var(--accent)' : 'var(--text-3)',
+      }}>
+      <SignOut size={18} />
+    </button>
+  );
+}
+
+function NavIcon({ href, label, active, children }: { href: string; label: string; active: boolean; children: React.ReactNode }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Link
+      href={href}
+      title={label}
+      prefetch={true}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150"
+      style={{
+        background: active ? 'var(--accent)' : hovered ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'transparent',
+        color: active ? '#fff' : hovered ? 'var(--accent)' : 'var(--text-3)',
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
 
 export default function Sidebar({ user }: { user: Profile }) {
   const pathname = usePathname();
@@ -51,16 +88,9 @@ export default function Sidebar({ user }: { user: Profile }) {
           {NAV.map(({ href, icon: Icon, label }) => {
             const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href));
             return (
-              <Link
-                key={href}
-                href={href}
-                title={label}
-                prefetch={true}
-                data-active={active}
-                className="nav-icon w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
-              >
+              <NavIcon key={href} href={href} label={label} active={active}>
                 <Icon size={18} weight={active ? 'fill' : 'regular'} />
-              </Link>
+              </NavIcon>
             );
           })}
         </nav>
@@ -74,11 +104,7 @@ export default function Sidebar({ user }: { user: Profile }) {
               <WifiHigh size={18} />
             </Link>
           )}
-          <button onClick={signOut} title="Sign out"
-            className="w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer transition-colors"
-            style={{ color: 'var(--text-3)' }}>
-            <SignOut size={18} />
-          </button>
+          <SignOutButton onClick={signOut} />
         </div>
       </aside>
 
