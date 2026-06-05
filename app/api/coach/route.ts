@@ -16,19 +16,41 @@ function buildHealthContext(snapshots: Array<Record<string, unknown>>, objective
   const recent = snapshots.slice(-7);
   const today = recent[recent.length - 1];
 
+  // Current time context
+  const now = new Date();
+  const hour = now.getHours();
+  const timeOfDay = hour < 6 ? 'early morning (before 6am)' : hour < 12 ? 'morning' : hour < 14 ? 'midday' : hour < 18 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
+  const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
+  const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+  // Body battery context: current value estimated by how much has drained since peak
+  const batteryPeak = today?.body_battery_high as number | null ?? null;
+  const batteryLow = today?.body_battery_low as number | null ?? null;
+  const batteryDrained = batteryPeak && batteryLow ? batteryPeak - batteryLow : null;
+  const currentBatteryEstimate = batteryPeak && batteryDrained
+    ? `~${Math.max(batteryLow ?? 0, batteryPeak - Math.round(batteryDrained * Math.min(hour / 16, 1)))} (estimated current, peak was ${batteryPeak})`
+    : batteryPeak ? `${batteryPeak} (peak today)` : 'no data';
+
   const lines = [
+    `## Current Time Context`,
+    `- Date: ${dateStr}`,
+    `- Time: ${timeStr} (${timeOfDay})`,
+    `- Day of week: ${dayName}`,
+    `- This means: the user is asking this question ${timeOfDay}. Advice about training "today" should factor in what's already happened and what's still feasible at this time of day.`,
+    '',
     `## User Health Data (Last ${recent.length} days)`,
     '',
-    today ? `### Today (${today.date})` : '',
-    today?.steps ? `- Steps: ${(today.steps as number).toLocaleString()}` : '',
-    today?.calories ? `- Calories burned: ${today.calories}` : '',
+    today ? `### Today (${today.date as string})` : '',
+    today?.steps ? `- Steps so far today: ${(today.steps as number).toLocaleString()}` : '',
+    today?.calories ? `- Calories burned so far: ${today.calories}` : '',
     today?.resting_hr ? `- Resting HR: ${today.resting_hr} bpm` : '',
     today?.hrv_last_night ? `- HRV last night: ${Math.round(today.hrv_last_night as number)} ms (${today.hrv_status ?? 'unknown status'})` : '',
-    today?.body_battery_high ? `- Body Battery: peak ${today.body_battery_high}, low ${today.body_battery_low}` : '',
-    today?.avg_stress ? `- Avg stress: ${today.avg_stress}/100` : '',
-    today?.sleep_seconds ? `- Sleep: ${fmtSleep(today.sleep_seconds as number)} (deep: ${fmtSleep(today.deep_sleep_seconds as number)}, REM: ${fmtSleep(today.rem_sleep_seconds as number)})` : '',
-    today?.distance_meters ? `- Distance: ${((today.distance_meters as number) / 1000).toFixed(1)} km` : '',
-    today?.active_seconds ? `- Active time: ${Math.round((today.active_seconds as number) / 60)} min` : '',
+    today?.body_battery_high ? `- Body Battery: ${currentBatteryEstimate}` : '',
+    today?.avg_stress ? `- Avg stress so far today: ${today.avg_stress}/100` : '',
+    today?.sleep_seconds ? `- Sleep last night: ${fmtSleep(today.sleep_seconds as number)} (deep: ${fmtSleep(today.deep_sleep_seconds as number)}, REM: ${fmtSleep(today.rem_sleep_seconds as number)})` : '',
+    today?.distance_meters ? `- Distance covered today: ${((today.distance_meters as number) / 1000).toFixed(1)} km` : '',
+    today?.active_seconds ? `- Active time today: ${Math.round((today.active_seconds as number) / 60)} min` : '',
     '',
     '### 7-day trends',
     `- Avg steps: ${Math.round(recent.filter(s => s.steps).reduce((a, s) => a + (s.steps as number), 0) / recent.filter(s => s.steps).length || 0).toLocaleString()}`,
@@ -86,7 +108,7 @@ If they have an objective, every recommendation should move them toward it.`;
   const stream = new ReadableStream({
     async start(controller) {
       const response = await anthropic.messages.create({
-        model: 'claude-haiku-4-5',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 1024,
         system: systemPrompt,
         messages: messages,
