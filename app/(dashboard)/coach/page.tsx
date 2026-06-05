@@ -1,16 +1,17 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
-import { loadTokens } from '@/lib/supabase/token-storage';
-import { GarminClient } from '@/lib/garmin/client';
+import { createSupabaseTokenStorage } from '@/lib/supabase/token-storage';
+import { GarminClient } from '@/lib/garmin/garmin-client';
 import CoachClient from '@/components/dashboard/CoachClient';
 
 export const dynamic = 'force-dynamic';
 
 async function syncTodayForUser(userId: string) {
   try {
-    const tokens = await loadTokens(userId);
+    const storage = createSupabaseTokenStorage(userId);
+    const tokens = await storage.getTokens();
     if (!tokens) return;
-    const garmin = new GarminClient(tokens);
+    const garmin = new GarminClient('', '', storage);
     const today = new Date().toISOString().split('T')[0]!;
     const summary = await garmin.getDailySummary(today);
     if (!summary) return;
