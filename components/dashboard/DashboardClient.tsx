@@ -351,20 +351,37 @@ export default function DashboardClient({
               { href: '/activities', label: 'Activities', desc: 'Training log', color: 'var(--accent)' },
               { href: '/sleep', label: 'Sleep', desc: 'Recovery', color: '#6366f1' },
               { href: '/group', label: 'Group', desc: 'Compete', color: '#16a34a' },
-              { href: '/onboarding', label: 'Garmin', desc: 'Connect', color: '#d97706' },
+              { href: '/coach', label: 'AI Coach', desc: 'Get coached', color: '#d97706' },
             ].map(({ href, label, desc, color }) => (
-              <Link key={href} href={href}
-                className="rounded-xl p-4 flex flex-col gap-1 transition-colors"
-                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-                <div className="w-6 h-1 rounded-full mb-1" style={{ background: color }} />
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{label}</p>
-                <p className="text-xs" style={{ color: 'var(--text-3)' }}>{desc}</p>
-              </Link>
+              <NavTile key={href} href={href} label={label} desc={desc} color={color} />
             ))}
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function NavTile({ href, label, desc, color }: { href: string; label: string; desc: string; color: string }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Link
+      href={href}
+      prefetch={true}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="rounded-xl p-4 flex flex-col gap-1 transition-all duration-150 cursor-pointer"
+      style={{
+        background: hovered ? 'color-mix(in srgb, var(--accent) 10%, var(--surface-2))' : 'var(--surface-2)',
+        border: hovered ? '1px solid color-mix(in srgb, var(--accent) 40%, var(--border))' : '1px solid var(--border)',
+      }}
+    >
+      <div className="w-6 h-1 rounded-full mb-1 transition-all duration-150"
+        style={{ background: hovered ? 'var(--accent)' : color }} />
+      <p className="text-sm font-semibold transition-colors duration-150"
+        style={{ color: hovered ? 'var(--accent)' : 'var(--text-1)' }}>{label}</p>
+      <p className="text-xs" style={{ color: 'var(--text-3)' }}>{desc}</p>
+    </Link>
   );
 }
 
