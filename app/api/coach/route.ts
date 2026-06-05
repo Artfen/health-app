@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseTokenStorage } from '@/lib/supabase/token-storage';
+import { GarminClient } from '@/lib/garmin/garmin-client';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -12,7 +14,26 @@ function fmtSleep(seconds: number | null) {
   return `${h}h ${m}m`;
 }
 
-function buildHealthContext(snapshots: Array<Record<string, unknown>>, objective: { title: string; description?: string | null; target_date?: string | null } | null) {
+function buildActivitiesContext(activities: Array<Record<string, unknown>>) {
+  if (!activities.length) return '';
+  const lines = ['## Recent Activities (last 10)'];
+  for (const a of activities) {
+    const type = (a.activityType as { typeKey: string })?.typeKey ?? 'activity';
+    const name = (a.activityName as string) ?? type;
+    const date = a.startTimeLocal ? new Date(a.startTimeLocal as string).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '';
+    const time = a.startTimeLocal ? new Date(a.startTimeLocal as string).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+    const dist = a.distance ? `${((a.distance as number) / 1000).toFixed(1)} km` : null;
+    const dur = a.duration ? `${Math.round((a.duration as number) / 60)} min` : null;
+    const hr = a.averageHR ? `avg HR ${a.averageHR} bpm` : null;
+    const cal = a.calories ? `${a.calories} kcal` : null;
+    const aerobic = a.aerobicTrainingEffect ? `aerobic load ${a.aerobicTrainingEffect}` : null;
+    const parts = [dist, dur, hr, cal, aerobic].filter(Boolean).join(', ');
+    lines.push(`- ${date} ${time}: ${name} (${type}) — ${parts}`);
+  }
+  return lines.join('\n');
+}
+
+function buildHealthContext(snapshots: Array<Record<string, unknown>>, objective: { title: string; description?: string | null; target_date?: string | null } | null, activities: Array<Record<string, unknown>> = []) {
   const recent = snapshots.slice(-7);
   const today = recent[recent.length - 1];
 
@@ -61,6 +82,8 @@ function buildHealthContext(snapshots: Array<Record<string, unknown>>, objective
     objective ? `## Current Objective: ${objective.title}` : '## No active objective set',
     objective?.description ? `Description: ${objective.description}` : '',
     objective?.target_date ? `Target date: ${objective.target_date}` : '',
+    '',
+    buildActivitiesContext(activities),
   ].filter(l => l !== '');
 
   return lines.join('\n');
@@ -85,7 +108,18 @@ export async function POST(request: NextRequest) {
       .eq('status', 'active').order('created_at', { ascending: false }).limit(1);
     activeObjective = objectives?.[0] ?? null;
   } catch { /* objectives table may not exist yet */ }
-  const healthContext = buildHealthContext((snapshots ?? []) as Array<Record<string, unknown>>, activeObjective);
+  // Fetch recent activities from Garmin
+  let recentActivities: Array<Record<string, unknown>> = [];
+  try {
+    const storage = createSupabaseTokenStorage(user.id);
+    const tokens = await storage.load();
+    if (tokens) {
+      const garmin = new GarminClient('', '', storage);
+      recentActivities = (await garmin.getActivities(10, 0)) as Array<Record<string, unknown>>;
+    }
+  } catch { /* skip if Garmin unavailable */ }
+
+  const healthContext = buildHealthContext((snapshots ?? []) as Array<Record<string, unknown>>, activeObjective, recentActivities);
 
   const systemPrompt = `You are an expert personal health and fitness coach with deep knowledge of endurance sports, strength training, recovery science, and wearable data interpretation.
 
