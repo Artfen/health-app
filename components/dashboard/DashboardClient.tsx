@@ -76,24 +76,35 @@ const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: 
   );
 };
 
-function StatCard({ label, value, sub, trend, accent, icon }: {
-  label: string; value: string; sub: string; trend?: number | null; accent?: boolean; icon: React.ReactNode;
+function StatCard({ label, value, sub, trend, accent, icon, href }: {
+  label: string; value: string; sub: string; trend?: number | null; accent?: boolean; icon: React.ReactNode; href: string;
 }) {
+  const [hovered, setHovered] = useState(false);
   const up = trend != null && trend > 0;
   const down = trend != null && trend < 0;
   return (
-    <div className="rounded-2xl p-5 flex flex-col gap-3"
+    <Link href={href} prefetch={true}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="rounded-2xl p-5 flex flex-col gap-3 transition-all duration-150"
       style={{
-        background: accent ? 'var(--accent)' : 'var(--surface)',
-        boxShadow: 'var(--shadow-sm)',
-        border: accent ? 'none' : '1px solid var(--border)',
+        background: accent
+          ? hovered ? '#d4481a' : 'var(--accent)'
+          : hovered ? 'color-mix(in srgb, var(--accent) 6%, var(--surface))' : 'var(--surface)',
+        boxShadow: hovered ? 'var(--shadow-md, 0 4px 16px rgba(0,0,0,0.10))' : 'var(--shadow-sm)',
+        border: accent ? 'none' : hovered ? '1px solid color-mix(in srgb, var(--accent) 35%, var(--border))' : '1px solid var(--border)',
+        transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
+        cursor: 'pointer',
       }}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium" style={{ color: accent ? 'rgba(255,255,255,0.7)' : 'var(--text-2)' }}>
           {label}
         </span>
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-          style={{ background: accent ? 'rgba(255,255,255,0.18)' : 'var(--surface-2)', color: accent ? '#fff' : 'var(--accent)' }}>
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-150"
+          style={{
+            background: accent ? 'rgba(255,255,255,0.18)' : hovered ? 'color-mix(in srgb, var(--accent) 15%, var(--surface-2))' : 'var(--surface-2)',
+            color: accent ? '#fff' : 'var(--accent)',
+          }}>
           {icon}
         </div>
       </div>
@@ -114,7 +125,7 @@ function StatCard({ label, value, sub, trend, accent, icon }: {
           </span>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -231,13 +242,13 @@ export default function DashboardClient({
           {/* 4 stat cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <StatCard label="Steps Today" value={t?.steps?.toLocaleString() ?? '--'} sub="goal: 10k"
-              trend={stepsTrend} accent icon={<Steps size={16} />} />
+              trend={stepsTrend} accent href="/activities" icon={<Steps size={16} />} />
             <StatCard label="Sleep" value={fmtSleep(t?.sleep_seconds ?? null)}
-              sub={t?.sleep_score ? `Score ${t.sleep_score}` : 'last night'} trend={sleepTrend} icon={<Moon size={16} />} />
+              sub={t?.sleep_score ? `Score ${t.sleep_score}` : 'last night'} trend={sleepTrend} href="/sleep" icon={<Moon size={16} />} />
             <StatCard label="HRV" value={t?.hrv_last_night ? `${Math.round(t.hrv_last_night)} ms` : '--'}
-              sub={t?.hrv_status ?? 'last night'} icon={<Heartbeat size={16} />} />
+              sub={t?.hrv_status ?? 'last night'} href="/sleep" icon={<Heartbeat size={16} />} />
             <StatCard label="Body Battery" value={t?.body_battery_high ? `${t.body_battery_high}` : '--'}
-              sub={t?.body_battery_low != null ? `Low: ${t.body_battery_low}` : 'peak today'} icon={<BatteryFull size={16} />} />
+              sub={t?.body_battery_low != null ? `Low: ${t.body_battery_low}` : 'peak today'} href="/activities" icon={<BatteryFull size={16} />} />
           </div>
 
           {/* Steps bar chart */}
@@ -277,8 +288,8 @@ export default function DashboardClient({
 
           {/* HRV + Sleep mini charts */}
           <div className="grid grid-cols-2 gap-4">
-            <MiniChart title="HRV - 7 days" data={chartData} dataKey="hrv" color="#16a34a" unit="ms" />
-            <MiniChart title="Sleep - 7 days" data={chartData} dataKey="sleep" color="#6366f1" unit="hrs" />
+            <MiniChart title="HRV - 7 days" data={chartData} dataKey="hrv" color="#16a34a" unit="ms" href="/sleep" />
+            <MiniChart title="Sleep - 7 days" data={chartData} dataKey="sleep" color="#6366f1" unit="hrs" href="/sleep" />
           </div>
         </div>
 
@@ -286,7 +297,7 @@ export default function DashboardClient({
         <div className="col-span-12 lg:col-span-4 flex flex-col gap-5">
 
           {/* Today detail list */}
-          <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+          <HoverPanel href="/activities">
             <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text-1)' }}>Today</p>
             <div className="flex flex-col">
               {[
@@ -309,10 +320,10 @@ export default function DashboardClient({
                 </div>
               ))}
             </div>
-          </div>
+          </HoverPanel>
 
           {/* Body battery gauge */}
-          <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+          <HoverPanel href="/activities">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Body Battery</p>
               <BatteryFull size={16} style={{ color: 'var(--accent)' }} />
@@ -343,7 +354,7 @@ export default function DashboardClient({
                 )}
               </>
             )}
-          </div>
+          </HoverPanel>
 
           {/* Quick nav tiles */}
           <div className="grid grid-cols-2 gap-3">
@@ -359,6 +370,25 @@ export default function DashboardClient({
         </div>
       </div>
     </div>
+  );
+}
+
+function HoverPanel({ href, children }: { href: string; children: React.ReactNode }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Link href={href} prefetch={true}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="rounded-2xl p-5 block transition-all duration-150"
+      style={{
+        background: hovered ? 'color-mix(in srgb, var(--accent) 5%, var(--surface))' : 'var(--surface)',
+        border: hovered ? '1px solid color-mix(in srgb, var(--accent) 30%, var(--border))' : '1px solid var(--border)',
+        boxShadow: hovered ? 'var(--shadow-md, 0 4px 16px rgba(0,0,0,0.10))' : 'var(--shadow-sm)',
+        transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
+        cursor: 'pointer',
+      }}>
+      {children}
+    </Link>
   );
 }
 
@@ -385,15 +415,27 @@ function NavTile({ href, label, desc, color }: { href: string; label: string; de
   );
 }
 
-function MiniChart({ title, data, dataKey, color, unit }: {
+function MiniChart({ title, data, dataKey, color, unit, href }: {
   title: string;
   data: Array<Record<string, string | number>>;
   dataKey: string;
   color: string;
   unit: string;
+  href: string;
 }) {
+  const [hovered, setHovered] = useState(false);
   return (
-    <div className="rounded-2xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+    <Link href={href} prefetch={true}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="rounded-2xl p-4 block transition-all duration-150"
+      style={{
+        background: hovered ? 'color-mix(in srgb, var(--accent) 5%, var(--surface))' : 'var(--surface)',
+        border: hovered ? '1px solid color-mix(in srgb, var(--accent) 30%, var(--border))' : '1px solid var(--border)',
+        boxShadow: hovered ? 'var(--shadow-md, 0 4px 16px rgba(0,0,0,0.10))' : 'var(--shadow-sm)',
+        transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
+        cursor: 'pointer',
+      }}>
       <p className="text-xs font-semibold mb-3" style={{ color: 'var(--text-2)' }}>{title}</p>
       {data.length > 0 ? (
         <ResponsiveContainer width="100%" height={75}>
@@ -408,6 +450,6 @@ function MiniChart({ title, data, dataKey, color, unit }: {
           <p className="text-xs" style={{ color: 'var(--text-3)' }}>No data</p>
         </div>
       )}
-    </div>
+    </Link>
   );
 }
