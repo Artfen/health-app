@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { House, Pulse, Moon, Users, SignOut, WifiHigh, Gear } from '@phosphor-icons/react';
+import { House, Pulse, Moon, Users, SignOut, WifiHigh, Gear, Brain } from '@phosphor-icons/react';
 import { createClient } from '@/lib/supabase/client';
 
 type Profile = {
@@ -17,6 +17,7 @@ const NAV = [
   { href: '/activities', icon: Pulse, label: 'Activities' },
   { href: '/sleep', icon: Moon, label: 'Sleep' },
   { href: '/group', icon: Users, label: 'Group' },
+  { href: '/coach', icon: Brain, label: 'AI Coach' },
 ];
 
 export default function Sidebar({ user }: { user: Profile }) {
