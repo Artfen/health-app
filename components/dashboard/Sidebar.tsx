@@ -56,11 +56,8 @@ export default function Sidebar({ user }: { user: Profile }) {
                 href={href}
                 title={label}
                 prefetch={true}
+                data-active={active}
                 className="nav-icon w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
-                style={{
-                  background: active ? 'var(--accent)' : 'transparent',
-                  color: active ? '#fff' : 'var(--text-3)',
-                }}
               >
                 <Icon size={18} weight={active ? 'fill' : 'regular'} />
               </Link>

@@ -56,8 +56,15 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 
-/* Sidebar nav icon hover */
-.nav-icon:not([style*="background: var(--accent)"]):hover {
-  background: color-mix(in srgb, var(--accent) 15%, transparent) !important;
-  color: var(--accent) !important;
+/* Sidebar nav icons */
+.nav-icon {
+  color: var(--text-3);
+}
+.nav-icon[data-active="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+.nav-icon[data-active="false"]:hover {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
 }
