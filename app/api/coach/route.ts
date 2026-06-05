@@ -110,7 +110,7 @@ If they have an objective, every recommendation should move them toward it.`;
     async start(controller) {
       try {
       const response = await anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
+        model: 'claude-haiku-4-5',
         max_tokens: 1024,
         system: systemPrompt,
         messages: messages,
