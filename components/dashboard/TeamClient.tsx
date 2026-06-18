@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   Barbell, Plus, ArrowRight, Copy, Check, Steps, Moon, Heartbeat, BatteryFull,
-  UserCircle, SignOut, ChartLineUp, X,
+  UserCircle, SignOut, ChartLineUp, X, Pulse, Gauge,
 } from '@phosphor-icons/react';
 
 type Snapshot = {
@@ -12,8 +12,11 @@ type Snapshot = {
   sleep_seconds: number | null;
   hrv_last_night: number | null;
   body_battery_high: number | null;
+  body_battery_current: number | null;
   resting_hr: number | null;
   active_seconds: number | null;
+  calories: number | null;
+  vo2_max: number | null;
 };
 
 export type RosterMember = {
@@ -93,11 +96,13 @@ function AthleteCard({ member, index }: { member: RosterMember; index: number })
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 mb-3">
+      <div className="grid grid-cols-3 gap-2 mb-3">
         <Metric icon={<Steps size={13} />} label="Steps" value={t?.steps?.toLocaleString() ?? '--'} color="#e8521c" />
         <Metric icon={<Moon size={13} />} label="Sleep" value={fmtSleep(t?.sleep_seconds ?? null)} color="#6366f1" />
-        <Metric icon={<Heartbeat size={13} />} label="HRV" value={t?.hrv_last_night ? `${Math.round(t.hrv_last_night)} ms` : '--'} color="#16a34a" />
-        <Metric icon={<BatteryFull size={13} />} label="Battery" value={t?.body_battery_high ? `${t.body_battery_high}` : '--'} color="#d97706" />
+        <Metric icon={<Heartbeat size={13} />} label="HRV" value={t?.hrv_last_night ? `${Math.round(t.hrv_last_night)}` : '--'} color="#16a34a" />
+        <Metric icon={<BatteryFull size={13} />} label="Battery" value={t?.body_battery_current != null ? `${t.body_battery_current}` : t?.body_battery_high != null ? `${t.body_battery_high}` : '--'} color="#d97706" />
+        <Metric icon={<Pulse size={13} />} label="Rest HR" value={t?.resting_hr ? `${t.resting_hr}` : '--'} color="#ec4899" />
+        <Metric icon={<Gauge size={13} />} label="VO₂" value={t?.vo2_max ? `${t.vo2_max}` : '--'} color="#10b981" />
       </div>
 
       <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--border)' }}>

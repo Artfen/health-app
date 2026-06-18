@@ -1,14 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Users, Copy, Check, Plus, ArrowRight, Steps, Moon, Heartbeat, BatteryFull, Timer, Trophy, X } from '@phosphor-icons/react';
+import { Users, Copy, Check, Plus, ArrowRight, Steps, Moon, Heartbeat, BatteryFull, Timer, Trophy, X, Pulse, Gauge, Flame } from '@phosphor-icons/react';
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Legend,
 } from 'recharts';
 
 export type Member = { id: string; full_name: string | null; email: string; garmin_display_name: string | null };
-export type Snapshot = { date: string; steps: number | null; sleep_seconds: number | null; hrv_last_night: number | null; body_battery_high: number | null; active_seconds: number | null; calories: number | null };
+export type Snapshot = { date: string; steps: number | null; sleep_seconds: number | null; hrv_last_night: number | null; body_battery_high: number | null; body_battery_current: number | null; active_seconds: number | null; calories: number | null; resting_hr: number | null; vo2_max: number | null };
 export type GroupData = {
   id: string;
   name: string;
@@ -50,13 +50,15 @@ const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: 
   );
 };
 
-function Leaderboard({ label, icon, members, memberSnapshots, snapKey, color, formatFn }: {
+function Leaderboard({ label, icon, members, memberSnapshots, snapKey, color, formatFn, lowerBetter }: {
   label: string; icon: React.ReactNode; members: Member[]; memberSnapshots: Record<string, Snapshot[]>;
-  snapKey: keyof Snapshot; color: string; formatFn?: (v: number) => string;
+  snapKey: keyof Snapshot; color: string; formatFn?: (v: number) => string; lowerBetter?: boolean;
 }) {
   const ranked = members.map((m) => ({ member: m, value: avg(memberSnapshots[m.id] ?? [], snapKey) }))
-    .sort((a, b) => b.value - a.value);
-  const max = ranked[0]?.value ?? 1;
+    .sort((a, b) => lowerBetter
+      ? (a.value === 0 ? 1 : b.value === 0 ? -1 : a.value - b.value)
+      : b.value - a.value);
+  const max = Math.max(1, ...ranked.map((r) => r.value));
 
   return (
     <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
@@ -242,6 +244,9 @@ export default function GroupClient({ userId, groups }: { userId: string; groups
           <Leaderboard label="HRV" icon={<Heartbeat size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="hrv_last_night" color="#16a34a" formatFn={(v) => `${v} ms`} />
           <Leaderboard label="Body Battery" icon={<BatteryFull size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="body_battery_high" color="#d97706" />
           <Leaderboard label="Active Time" icon={<Timer size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="active_seconds" color="#06b6d4" formatFn={(v) => `${Math.floor(v / 60)} min`} />
+          <Leaderboard label="Resting HR" icon={<Pulse size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="resting_hr" color="#ec4899" formatFn={(v) => v ? `${v} bpm` : '--'} lowerBetter />
+          <Leaderboard label="VO₂ Max" icon={<Gauge size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="vo2_max" color="#10b981" />
+          <Leaderboard label="Calories" icon={<Flame size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="calories" color="#f97316" formatFn={(v) => v ? `${v.toLocaleString()} kcal` : '--'} />
         </div>
       </div>
 

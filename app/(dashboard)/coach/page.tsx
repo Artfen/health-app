@@ -13,22 +13,28 @@ async function syncTodayForUser(userId: string) {
     if (!tokens) return;
     const garmin = new GarminClient('', '', storage);
     const today = new Date().toISOString().split('T')[0]!;
-    const [summary, bb] = await Promise.all([
+    const [summary, bb, vo2, rhr] = await Promise.all([
       garmin.getDailySummary(today),
       garmin.getBodyBatteryDay(today),
+      garmin.getVo2Max(today),
+      garmin.getRestingHeartRateDay(today),
     ]);
     if (!summary) return;
+    const summaryRhr = summary as { restingHeartRateValue?: number; restingHeartRate?: number };
     const admin = createAdminClient();
     await admin.from('health_snapshots').upsert({
       user_id: userId,
       date: today,
       source: 'garmin',
       steps: summary.totalSteps ?? null,
-      calories: summary.activeKilocalories ?? null,
-      resting_hr: summary.restingHeartRateValue ?? null,
+      calories: summary.totalKilocalories ?? null,
+      active_calories: summary.activeKilocalories ?? null,
+      resting_hr: rhr ?? summaryRhr.restingHeartRateValue ?? summaryRhr.restingHeartRate ?? null,
       avg_stress: summary.averageStressLevel ?? null,
+      vo2_max: vo2,
       body_battery_high: bb.high ?? summary.bodyBatteryHighestValue ?? null,
       body_battery_low: bb.low ?? summary.bodyBatteryLowestValue ?? null,
+      body_battery_current: bb.current ?? null,
       distance_meters: summary.totalDistanceMeters ?? null,
       active_seconds: summary.activeSeconds ?? null,
     }, { onConflict: 'user_id,date' });

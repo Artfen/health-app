@@ -16,6 +16,7 @@ import {
   TrendDown,
   NotePencil,
   X,
+  Gauge,
 } from '@phosphor-icons/react';
 import Link from 'next/link';
 import {
@@ -38,6 +39,8 @@ type Snapshot = {
   avg_stress: number | null;
   body_battery_high: number | null;
   body_battery_low: number | null;
+  body_battery_current: number | null;
+  vo2_max: number | null;
   sleep_seconds: number | null;
   deep_sleep_seconds: number | null;
   rem_sleep_seconds: number | null;
@@ -280,8 +283,8 @@ export default function DashboardClient({
               sub={t?.sleep_score ? `Score ${t.sleep_score}` : 'last night'} trend={sleepTrend} href="/sleep" icon={<Moon size={16} />} />
             <StatCard label="HRV" value={t?.hrv_last_night ? `${Math.round(t.hrv_last_night)} ms` : '--'}
               sub={t?.hrv_status ?? 'last night'} href="/sleep" icon={<Heartbeat size={16} />} />
-            <StatCard label="Body Battery" value={t?.body_battery_high ? `${t.body_battery_high}` : '--'}
-              sub={t?.body_battery_low != null ? `Low: ${t.body_battery_low}` : 'peak today'} href="/activities" icon={<BatteryFull size={16} />} />
+            <StatCard label="Body Battery" value={t?.body_battery_current != null ? `${t.body_battery_current}` : t?.body_battery_high != null ? `${t.body_battery_high}` : '--'}
+              sub={t?.body_battery_high != null ? `Peak ${t.body_battery_high}` : 'now'} href="/activities" icon={<BatteryFull size={16} />} />
           </div>
 
           {/* Steps bar chart */}
@@ -337,6 +340,7 @@ export default function DashboardClient({
                 { icon: <Lightning size={14} />, label: 'Avg Stress', value: t?.avg_stress ? `${t.avg_stress}` : '--', color: '#e8521c' },
                 { icon: <Flame size={14} />, label: 'Calories', value: t?.calories?.toLocaleString() ?? '--', color: '#f97316' },
                 { icon: <Heartbeat size={14} />, label: 'Resting HR', value: t?.resting_hr ? `${t.resting_hr} bpm` : '--', color: '#ec4899' },
+                { icon: <Gauge size={14} />, label: 'VO₂ Max', value: t?.vo2_max ? `${t.vo2_max}` : '--', color: '#10b981' },
                 { icon: <Timer size={14} />, label: 'Active time', value: t?.active_seconds ? `${Math.floor(t.active_seconds / 60)} min` : '--', color: '#06b6d4' },
                 { icon: <Steps size={14} />, label: 'Distance', value: t?.distance_meters ? `${(t.distance_meters / 1000).toFixed(1)} km` : '--', color: '#8b5cf6' },
               ].map(({ icon, label, value, color }, i, arr) => (
@@ -361,32 +365,34 @@ export default function DashboardClient({
               <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Body Battery</p>
               <BatteryFull size={16} style={{ color: 'var(--accent)' }} />
             </div>
-            <div className="flex items-baseline gap-2 mb-3">
-              <p className="text-4xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>
-                {t?.body_battery_high ?? '--'}
-              </p>
-              {t?.body_battery_high && (
-                <p className="text-sm" style={{ color: 'var(--text-3)' }}>/ 100</p>
-              )}
-            </div>
-            {t?.body_battery_high != null && (
-              <>
-                <div className="h-2 rounded-full overflow-hidden mb-2" style={{ background: 'var(--border)' }}>
-                  <div className="h-full rounded-full"
-                    style={{
-                      width: `${t.body_battery_high}%`,
-                      background: t.body_battery_high > 70 ? 'var(--green)'
-                        : t.body_battery_high > 40 ? 'var(--amber)' : 'var(--red)',
-                    }} />
-                </div>
-                {t.body_battery_low != null && (
-                  <div className="flex justify-between text-xs" style={{ color: 'var(--text-3)' }}>
-                    <span>Low: {t.body_battery_low}</span>
-                    <span>Peak: {t.body_battery_high}</span>
+            {(() => {
+              const bb = t?.body_battery_current ?? t?.body_battery_high ?? null;
+              return (
+                <>
+                  <div className="flex items-baseline gap-2 mb-3">
+                    <p className="text-4xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>
+                      {bb ?? '--'}
+                    </p>
+                    {bb != null && <p className="text-sm" style={{ color: 'var(--text-3)' }}>/ 100 now</p>}
                   </div>
-                )}
-              </>
-            )}
+                  {bb != null && (
+                    <>
+                      <div className="h-2 rounded-full overflow-hidden mb-2" style={{ background: 'var(--border)' }}>
+                        <div className="h-full rounded-full"
+                          style={{
+                            width: `${bb}%`,
+                            background: bb > 70 ? 'var(--green)' : bb > 40 ? 'var(--amber)' : 'var(--red)',
+                          }} />
+                      </div>
+                      <div className="flex justify-between text-xs" style={{ color: 'var(--text-3)' }}>
+                        <span>Low: {t?.body_battery_low ?? '--'}</span>
+                        <span>Peak: {t?.body_battery_high ?? '--'}</span>
+                      </div>
+                    </>
+                  )}
+                </>
+              );
+            })()}
           </HoverPanel>
 
           {/* Quick nav tiles */}
@@ -450,8 +456,13 @@ export default function DashboardClient({
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <LogField label="Body battery (peak)"><LogInput k="body_battery_high" placeholder="80" form={logForm} set={setLogForm} /></LogField>
+                <LogField label="Body battery"><LogInput k="body_battery_high" placeholder="80" form={logForm} set={setLogForm} /></LogField>
                 <LogField label="Avg stress"><LogInput k="avg_stress" placeholder="30" form={logForm} set={setLogForm} /></LogField>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <LogField label="VO₂ max"><LogInput k="vo2_max" placeholder="48" form={logForm} set={setLogForm} /></LogField>
+                <div />
               </div>
 
               <div className="grid grid-cols-2 gap-3">

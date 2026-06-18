@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
     avg_stress: num(body.avg_stress),
     body_battery_high: num(body.body_battery_high),
     body_battery_low: num(body.body_battery_low),
+    body_battery_current: num(body.body_battery_high),
+    vo2_max: num(body.vo2_max),
     sleep_seconds: sleepSeconds,
     sleep_score: num(body.sleep_score),
     hrv_last_night: num(body.hrv_last_night),

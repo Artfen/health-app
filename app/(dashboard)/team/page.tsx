@@ -35,7 +35,7 @@ export default async function TeamPage() {
         ? admin.from('profiles').select('id, full_name, email, garmin_display_name, garmin_connected').in('id', allMemberIds)
         : Promise.resolve({ data: [] as Record<string, unknown>[] }),
       allMemberIds.length
-        ? admin.from('health_snapshots').select('user_id, date, steps, sleep_seconds, hrv_last_night, body_battery_high, resting_hr, active_seconds').in('user_id', allMemberIds).gte('date', past7).order('date', { ascending: true })
+        ? admin.from('health_snapshots').select('user_id, date, steps, sleep_seconds, hrv_last_night, body_battery_high, body_battery_current, resting_hr, active_seconds, calories, vo2_max').in('user_id', allMemberIds).gte('date', past7).order('date', { ascending: true })
         : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     ]);
 

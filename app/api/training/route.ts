@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { date, title, type, description, duration_min, intensity } = await request.json();
+  const { date, title, type, description, duration_min, intensity, exercises } = await request.json();
   if (!date || !title?.trim()) {
     return NextResponse.json({ error: 'Date and title are required' }, { status: 400 });
   }
@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
       description: description ?? null,
       duration_min: duration_min ?? null,
       intensity: intensity ?? null,
+      exercises: Array.isArray(exercises) ? exercises : [],
       created_by: 'user',
     })
     .select()
@@ -55,7 +56,7 @@ export async function PATCH(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id, ...fields } = await request.json();
-  const allowed = ['date', 'title', 'type', 'description', 'duration_min', 'intensity', 'status'];
+  const allowed = ['date', 'title', 'type', 'description', 'duration_min', 'intensity', 'status', 'exercises'];
   const update: Record<string, unknown> = {};
   for (const k of allowed) if (k in fields) update[k] = fields[k];
 

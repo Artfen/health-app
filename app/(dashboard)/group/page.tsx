@@ -36,7 +36,7 @@ export default async function GroupPage() {
         ? admin.from('profiles').select('id, full_name, email, garmin_display_name').in('id', allMemberIds)
         : Promise.resolve({ data: [] as Record<string, unknown>[] }),
       allMemberIds.length
-        ? admin.from('health_snapshots').select('user_id, date, steps, sleep_seconds, hrv_last_night, body_battery_high, active_seconds, calories').in('user_id', allMemberIds).gte('date', past7).order('date', { ascending: true })
+        ? admin.from('health_snapshots').select('user_id, date, steps, sleep_seconds, hrv_last_night, body_battery_high, body_battery_current, active_seconds, calories, resting_hr, vo2_max').in('user_id', allMemberIds).gte('date', past7).order('date', { ascending: true })
         : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     ]);
 

@@ -5,17 +5,26 @@ import { GarminClient } from '@/lib/garmin/garmin-client';
 import { createSupabaseTokenStorage } from '@/lib/supabase/token-storage';
 
 async function syncDate(client: GarminClient, userId: string, syncDate: string) {
-  const [summary, sleep, hrv, bb] = await Promise.allSettled([
+  const [summary, sleep, hrv, bb, vo2, rhr] = await Promise.allSettled([
     client.getDailySummary(syncDate),
     client.getSleepData(syncDate),
     client.getHRV(syncDate),
     client.getBodyBatteryDay(syncDate),
+    client.getVo2Max(syncDate),
+    client.getRestingHeartRateDay(syncDate),
   ]);
 
   const summaryData = summary.status === 'fulfilled' ? summary.value : null;
   const sleepData = sleep.status === 'fulfilled' ? sleep.value : null;
   const hrvData = hrv.status === 'fulfilled' ? hrv.value : null;
-  const bbData = bb.status === 'fulfilled' ? bb.value : { high: null, low: null };
+  const bbData = bb.status === 'fulfilled' ? bb.value : { high: null, low: null, current: null };
+  const vo2Max = vo2.status === 'fulfilled' ? vo2.value : null;
+  const rhrValue = rhr.status === 'fulfilled' ? rhr.value : null;
+
+  // Resting HR field name in the summary is inconsistent; try both, then the
+  // dedicated endpoint value.
+  const summaryRhr = (summaryData as { restingHeartRateValue?: number; restingHeartRate?: number } | null);
+  const restingHr = rhrValue ?? summaryRhr?.restingHeartRateValue ?? summaryRhr?.restingHeartRate ?? null;
 
   return {
     user_id: userId,
@@ -24,10 +33,12 @@ async function syncDate(client: GarminClient, userId: string, syncDate: string) 
     steps: summaryData?.totalSteps ?? null,
     calories: summaryData?.totalKilocalories ?? null,
     active_calories: summaryData?.activeKilocalories ?? null,
-    resting_hr: summaryData?.restingHeartRateValue ?? null,
+    resting_hr: restingHr,
     avg_stress: summaryData?.averageStressLevel ?? null,
+    vo2_max: vo2Max,
     body_battery_high: bbData.high ?? summaryData?.bodyBatteryHighestValue ?? null,
     body_battery_low: bbData.low ?? summaryData?.bodyBatteryLowestValue ?? null,
+    body_battery_current: bbData.current ?? null,
     sleep_seconds: sleepData?.dailySleepDTO?.deepSleepSeconds != null
       ? (sleepData.dailySleepDTO.deepSleepSeconds +
         sleepData.dailySleepDTO.lightSleepSeconds +

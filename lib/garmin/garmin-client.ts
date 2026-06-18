@@ -182,29 +182,64 @@ export class GarminClient {
   }
 
   // The daily summary often returns null body-battery fields, so read the
-  // dedicated body-battery endpoint and reduce its time-series to a high/low.
-  // Each reading is typically [timestampGMT, status, level, version]; we take
-  // the level (index 2), falling back to index 1 for the shorter [ts, level] shape.
-  async getBodyBatteryDay(date: string): Promise<{ high: number | null; low: number | null }> {
+  // dedicated body-battery endpoint and reduce its time-series to high/low and
+  // the most recent (current) value. Each reading is typically
+  // [timestampGMT, status, level, version]; level is index 2 (fallback index 1).
+  async getBodyBatteryDay(date: string): Promise<{ high: number | null; low: number | null; current: number | null }> {
     try {
       const raw = await this.auth.request<Array<{ bodyBatteryValuesArray?: unknown[] }>>(
         `${ENDPOINTS.BODY_BATTERY}?startDate=${date}&endDate=${date}`,
       );
       const arr = raw?.[0]?.bodyBatteryValuesArray;
-      if (!Array.isArray(arr) || arr.length === 0) return { high: null, low: null };
+      if (!Array.isArray(arr) || arr.length === 0) return { high: null, low: null, current: null };
 
       const values: number[] = [];
+      let current: number | null = null;
+      let latestTs = -1;
       for (const entry of arr) {
         if (!Array.isArray(entry)) continue;
         const level = typeof entry[2] === 'number' ? entry[2]
           : typeof entry[1] === 'number' ? entry[1]
           : null;
-        if (level != null && Number.isFinite(level)) values.push(level);
+        if (level == null || !Number.isFinite(level)) continue;
+        values.push(level);
+        const ts = typeof entry[0] === 'number' ? entry[0] : 0;
+        if (ts >= latestTs) { latestTs = ts; current = level; }
       }
-      if (values.length === 0) return { high: null, low: null };
-      return { high: Math.max(...values), low: Math.min(...values) };
+      if (values.length === 0) return { high: null, low: null, current: null };
+      return { high: Math.max(...values), low: Math.min(...values), current };
     } catch {
-      return { high: null, low: null };
+      return { high: null, low: null, current: null };
+    }
+  }
+
+  // VO2 max from the metrics endpoint. Shape varies; dig out the generic value.
+  async getVo2Max(date: string): Promise<number | null> {
+    try {
+      const raw = await this.auth.request<unknown>(
+        `${ENDPOINTS.VO2MAX}/${date}/${date}`,
+      );
+      const row = Array.isArray(raw) ? raw[0] : raw;
+      const generic = (row as { generic?: { vo2MaxPreciseValue?: number; vo2MaxValue?: number } })?.generic;
+      const v = generic?.vo2MaxPreciseValue ?? generic?.vo2MaxValue ?? null;
+      return typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 10) / 10 : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Resting HR. The daily summary field is unreliable, so read the dedicated
+  // daily heart-rate endpoint which carries restingHeartRate directly.
+  async getRestingHeartRateDay(date: string): Promise<number | null> {
+    try {
+      const displayName = await this.getDisplayName();
+      const raw = await this.auth.request<{ restingHeartRate?: number }>(
+        `${ENDPOINTS.HEART_RATE}/${displayName}?date=${date}`,
+      );
+      const v = raw?.restingHeartRate;
+      return typeof v === 'number' && Number.isFinite(v) ? v : null;
+    } catch {
+      return null;
     }
   }
 

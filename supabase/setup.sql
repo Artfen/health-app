@@ -64,6 +64,8 @@ create table public.health_snapshots (
   avg_stress integer,
   body_battery_high integer,
   body_battery_low integer,
+  body_battery_current integer,
+  vo2_max numeric,
   sleep_seconds integer,
   deep_sleep_seconds integer,
   rem_sleep_seconds integer,
@@ -239,6 +241,7 @@ create table public.training_sessions (
   intensity text,
   status text default 'planned' check (status in ('planned', 'completed', 'skipped')),
   created_by text default 'user' check (created_by in ('user', 'coach')),
+  exercises jsonb default '[]'::jsonb,
   created_at timestamptz default now()
 );
 create index if not exists training_sessions_user_date_idx on public.training_sessions(user_id, date);
