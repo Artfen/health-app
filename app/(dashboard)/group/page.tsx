@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import GroupClient from '@/components/dashboard/GroupClient';
+import GroupClient, { type GroupData, type Member } from '@/components/dashboard/GroupClient';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,56 +10,69 @@ export default async function GroupPage() {
   if (!user) return null;
 
   const admin = createAdminClient();
+  const past7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]!;
 
-  const { data: memberships } = await admin
+  // Every group the user belongs to.
+  const { data: myMemberships } = await admin
     .from('group_members')
-    .select('group_id, groups(id, name, owner_id, invite_code)')
+    .select('group_id')
     .eq('user_id', user.id);
+  const groupIds = [...new Set((myMemberships ?? []).map((m) => m.group_id))];
 
-  const groups = memberships?.map((m) => m.groups).filter(Boolean).flat() ?? [];
-  const primaryGroup = groups[0] ?? null;
+  const groups: GroupData[] = [];
 
-  let members: Array<{ id: string; full_name: string | null; email: string; garmin_display_name: string | null }> = [];
-  let memberSnapshots: Record<string, Array<{
-    date: string;
-    steps: number | null;
-    sleep_seconds: number | null;
-    hrv_last_night: number | null;
-    body_battery_high: number | null;
-    active_seconds: number | null;
-    calories: number | null;
-  }>> = {};
+  if (groupIds.length) {
+    const [{ data: groupRows }, { data: allMemberships }] = await Promise.all([
+      admin.from('groups').select('id, name, owner_id, invite_code').in('id', groupIds),
+      admin.from('group_members').select('group_id, user_id').in('group_id', groupIds),
+    ]);
 
-  if (primaryGroup) {
-    const { data: groupMembers } = await admin
-      .from('group_members')
-      .select('user_id, profiles(id, full_name, email, garmin_display_name)')
-      .eq('group_id', primaryGroup.id);
+    const allMemberIds = [...new Set((allMemberships ?? []).map((m) => m.user_id))];
 
-    members = groupMembers?.map((gm) => gm.profiles).filter(Boolean).flat() as typeof members ?? [];
+    // Fetch profiles + snapshots by id (no FK exists from group_members to
+    // profiles, so a nested embed returns nothing — fetch separately).
+    const [{ data: profiles }, { data: snaps }] = await Promise.all([
+      allMemberIds.length
+        ? admin.from('profiles').select('id, full_name, email, garmin_display_name').in('id', allMemberIds)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      allMemberIds.length
+        ? admin.from('health_snapshots').select('user_id, date, steps, sleep_seconds, hrv_last_night, body_battery_high, active_seconds, calories').in('user_id', allMemberIds).gte('date', past7).order('date', { ascending: true })
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    ]);
 
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]!;
-    const today = new Date().toISOString().split('T')[0]!;
-
-    for (const member of members) {
-      const { data: snaps } = await admin
-        .from('health_snapshots')
-        .select('date, steps, sleep_seconds, hrv_last_night, body_battery_high, active_seconds, calories')
-        .eq('user_id', member.id)
-        .gte('date', sevenDaysAgo)
-        .lte('date', today)
-        .order('date', { ascending: true });
-
-      memberSnapshots[member.id] = snaps ?? [];
+    const profileById = new Map((profiles ?? []).map((p) => [p.id as string, p]));
+    const snapsByUser = new Map<string, Record<string, unknown>[]>();
+    for (const s of (snaps ?? [])) {
+      const arr = snapsByUser.get(s.user_id as string) ?? [];
+      arr.push(s);
+      snapsByUser.set(s.user_id as string, arr);
     }
+
+    for (const g of (groupRows ?? [])) {
+      const memberIds = (allMemberships ?? []).filter((m) => m.group_id === g.id).map((m) => m.user_id);
+      const members: Member[] = memberIds.map((id) => {
+        const p = profileById.get(id);
+        return {
+          id,
+          full_name: (p?.full_name as string) ?? null,
+          email: (p?.email as string) ?? '',
+          garmin_display_name: (p?.garmin_display_name as string) ?? null,
+        };
+      });
+      const memberSnapshots: GroupData['memberSnapshots'] = {};
+      for (const id of memberIds) {
+        memberSnapshots[id] = (snapsByUser.get(id) ?? []) as unknown as GroupData['memberSnapshots'][string];
+      }
+      groups.push({ id: g.id, name: g.name, owner_id: g.owner_id, invite_code: g.invite_code, members, memberSnapshots });
+    }
+
+    // Keep a stable order: groups the user owns first, then by name.
+    groups.sort((a, b) => {
+      const ao = a.owner_id === user.id ? 0 : 1;
+      const bo = b.owner_id === user.id ? 0 : 1;
+      return ao - bo || a.name.localeCompare(b.name);
+    });
   }
 
-  return (
-    <GroupClient
-      userId={user.id}
-      primaryGroup={primaryGroup as { id: string; name: string; owner_id: string; invite_code: string } | null}
-      members={members}
-      memberSnapshots={memberSnapshots}
-    />
-  );
+  return <GroupClient userId={user.id} groups={groups} />;
 }
