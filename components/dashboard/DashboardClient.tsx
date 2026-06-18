@@ -207,13 +207,23 @@ export default function DashboardClient({
   const sleepTrend = snap?.sleep_seconds && prevSnap?.sleep_seconds
     ? Math.round(((snap.sleep_seconds - prevSnap.sleep_seconds) / prevSnap.sleep_seconds) * 100) : null;
 
-  const chartData = weekSnapshots.map((s) => ({
-    date: fmtShortDate(s.date, localeTag),
-    steps: s.steps ?? 0,
-    hrv: s.hrv_last_night ? Math.round(s.hrv_last_night) : 0,
-    sleep: s.sleep_seconds ? Math.round(s.sleep_seconds / 3600 * 10) / 10 : 0,
-    battery: s.body_battery_high ?? 0,
-  }));
+  // Build a continuous 7-day window ending today so the chart reads as a real
+  // timeline — days without a snapshot show as empty slots instead of the bars
+  // collapsing together. Empty when the user has no data at all.
+  const byDate = new Map(weekSnapshots.map((s) => [s.date, s]));
+  const chartData = weekSnapshots.length === 0 ? [] : Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const s = byDate.get(key);
+    return {
+      date: fmtShortDate(key, localeTag),
+      steps: s?.steps ?? 0,
+      hrv: s?.hrv_last_night ? Math.round(s.hrv_last_night) : 0,
+      sleep: s?.sleep_seconds ? Math.round(s.sleep_seconds / 3600 * 10) / 10 : 0,
+      battery: s?.body_battery_high ?? 0,
+    };
+  });
 
   return (
     <div className="px-6 py-6 pb-24 lg:pb-8 max-w-[1280px] mx-auto">
@@ -585,7 +595,7 @@ function MiniChart({ title, noDataLabel, data, dataKey, color, unit, href }: {
         cursor: 'pointer',
       }}>
       <p className="text-xs font-semibold mb-3" style={{ color: 'var(--text-2)' }}>{title}</p>
-      {data.length > 0 ? (
+      {data.some((d) => Number(d[dataKey]) > 0) ? (
         <ResponsiveContainer width="100%" height={75}>
           <BarChart data={data} margin={{ top: 0, right: 0, left: -32, bottom: 0 }} barSize={14}>
             <XAxis dataKey="date" tick={{ fill: 'var(--text-3)', fontSize: 10 }} axisLine={false} tickLine={false} />
