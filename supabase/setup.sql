@@ -107,6 +107,23 @@ alter table public.objectives enable row level security;
 -- RLS on with no policies: only the service-role key (server-side) can access it.
 alter table public.garmin_mfa_sessions enable row level security;
 
+-- SECURITY DEFINER helpers — groups and group_members reference each other (and
+-- group_members references itself), which causes infinite RLS recursion if
+-- inlined in policies. Running as the function owner bypasses RLS on the read.
+create or replace function public.is_group_member(gid uuid, uid uuid)
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (select 1 from public.group_members where group_id = gid and user_id = uid);
+$$;
+
+create or replace function public.shares_group(a uuid, b uuid)
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (
+    select 1 from public.group_members gm1
+    join public.group_members gm2 on gm1.group_id = gm2.group_id
+    where gm1.user_id = a and gm2.user_id = b
+  );
+$$;
+
 -- profiles
 create policy "Users can view their own profile"
   on public.profiles for select using (auth.uid() = id);
@@ -118,13 +135,7 @@ create policy "Users can insert their own profile"
   on public.profiles for insert with check (auth.uid() = id);
 
 create policy "Group members can view each other's profiles"
-  on public.profiles for select using (
-    exists (
-      select 1 from public.group_members gm1
-      join public.group_members gm2 on gm1.group_id = gm2.group_id
-      where gm1.user_id = auth.uid() and gm2.user_id = profiles.id
-    )
-  );
+  on public.profiles for select using (public.shares_group(auth.uid(), id));
 
 -- garmin_tokens
 create policy "Users can only access their own tokens"
@@ -133,10 +144,7 @@ create policy "Users can only access their own tokens"
 -- groups
 create policy "Group members can view their groups"
   on public.groups for select using (
-    exists (
-      select 1 from public.group_members
-      where group_id = groups.id and user_id = auth.uid()
-    )
+    auth.uid() = owner_id or public.is_group_member(id, auth.uid())
   );
 
 create policy "Users can create groups"
@@ -148,11 +156,7 @@ create policy "Group owners can update their groups"
 -- group_members
 create policy "Users can view memberships in their groups"
   on public.group_members for select using (
-    user_id = auth.uid() or
-    exists (
-      select 1 from public.group_members gm
-      where gm.group_id = group_members.group_id and gm.user_id = auth.uid()
-    )
+    user_id = auth.uid() or public.is_group_member(group_id, auth.uid())
   );
 
 create policy "Users can join groups"
@@ -172,13 +176,7 @@ create policy "Users can update their own snapshots"
   on public.health_snapshots for update using (auth.uid() = user_id);
 
 create policy "Group members can view each other's snapshots"
-  on public.health_snapshots for select using (
-    exists (
-      select 1 from public.group_members gm1
-      join public.group_members gm2 on gm1.group_id = gm2.group_id
-      where gm1.user_id = auth.uid() and gm2.user_id = health_snapshots.user_id
-    )
-  );
+  on public.health_snapshots for select using (public.shares_group(auth.uid(), user_id));
 
 -- objectives
 create policy "Users can manage their own objectives"
@@ -281,26 +279,40 @@ alter table public.injuries enable row level security;
 alter table public.teams enable row level security;
 alter table public.team_members enable row level security;
 
+-- SECURITY DEFINER helpers — teams and team_members reference each other, so
+-- inlining these checks in policies causes infinite RLS recursion. Running them
+-- as the function owner bypasses RLS on the read and breaks the loop.
+create or replace function public.is_team_member(tid uuid, uid uuid)
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (select 1 from public.team_members where team_id = tid and user_id = uid);
+$$;
+
+create or replace function public.is_team_owner(tid uuid, uid uuid)
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (select 1 from public.teams where id = tid and owner_id = uid);
+$$;
+
+create or replace function public.is_coach_of(athlete uuid, coach uuid)
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (
+    select 1 from public.team_members tm
+    join public.teams t on t.id = tm.team_id
+    where tm.user_id = athlete and t.owner_id = coach
+  );
+$$;
+
 create policy "Users manage own training sessions"
   on public.training_sessions for all using (auth.uid() = user_id);
 
 create policy "Coaches view athlete training"
-  on public.training_sessions for select using (
-    exists (
-      select 1 from public.team_members tm
-      join public.teams t on t.id = tm.team_id
-      where tm.user_id = training_sessions.user_id and t.owner_id = auth.uid()
-    )
-  );
+  on public.training_sessions for select using (public.is_coach_of(user_id, auth.uid()));
 
 create policy "Users manage own injuries"
   on public.injuries for all using (auth.uid() = user_id);
 
 create policy "Team members can view their team"
   on public.teams for select using (
-    auth.uid() = owner_id or exists (
-      select 1 from public.team_members where team_id = teams.id and user_id = auth.uid()
-    )
+    auth.uid() = owner_id or public.is_team_member(id, auth.uid())
   );
 create policy "Users can create teams"
   on public.teams for insert with check (auth.uid() = owner_id);
@@ -309,9 +321,7 @@ create policy "Owners can update their teams"
 
 create policy "Members can view team membership"
   on public.team_members for select using (
-    user_id = auth.uid() or exists (
-      select 1 from public.teams t where t.id = team_members.team_id and t.owner_id = auth.uid()
-    )
+    user_id = auth.uid() or public.is_team_owner(team_id, auth.uid())
   );
 create policy "Users can join teams"
   on public.team_members for insert with check (auth.uid() = user_id);
@@ -320,18 +330,6 @@ create policy "Users can leave teams"
 
 -- Coaches can read their athletes' snapshots and profiles for the team dashboard.
 create policy "Coaches view athlete snapshots"
-  on public.health_snapshots for select using (
-    exists (
-      select 1 from public.team_members tm
-      join public.teams t on t.id = tm.team_id
-      where tm.user_id = health_snapshots.user_id and t.owner_id = auth.uid()
-    )
-  );
+  on public.health_snapshots for select using (public.is_coach_of(user_id, auth.uid()));
 create policy "Coaches view athlete profiles"
-  on public.profiles for select using (
-    exists (
-      select 1 from public.team_members tm
-      join public.teams t on t.id = tm.team_id
-      where tm.user_id = profiles.id and t.owner_id = auth.uid()
-    )
-  );
+  on public.profiles for select using (public.is_coach_of(id, auth.uid()));

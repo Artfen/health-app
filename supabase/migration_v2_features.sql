@@ -73,6 +73,28 @@ alter table public.injuries enable row level security;
 alter table public.teams enable row level security;
 alter table public.team_members enable row level security;
 
+-- SECURITY DEFINER helpers. teams and team_members reference each other, so
+-- inlining the checks in policies causes infinite RLS recursion. These run as
+-- the function owner and bypass RLS on the tables they read, breaking the loop.
+create or replace function public.is_team_member(tid uuid, uid uuid)
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (select 1 from public.team_members where team_id = tid and user_id = uid);
+$$;
+
+create or replace function public.is_team_owner(tid uuid, uid uuid)
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (select 1 from public.teams where id = tid and owner_id = uid);
+$$;
+
+create or replace function public.is_coach_of(athlete uuid, coach uuid)
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (
+    select 1 from public.team_members tm
+    join public.teams t on t.id = tm.team_id
+    where tm.user_id = athlete and t.owner_id = coach
+  );
+$$;
+
 -- training_sessions
 drop policy if exists "Users manage own training sessions" on public.training_sessions;
 create policy "Users manage own training sessions"
@@ -80,13 +102,7 @@ create policy "Users manage own training sessions"
 
 drop policy if exists "Coaches view athlete training" on public.training_sessions;
 create policy "Coaches view athlete training"
-  on public.training_sessions for select using (
-    exists (
-      select 1 from public.team_members tm
-      join public.teams t on t.id = tm.team_id
-      where tm.user_id = training_sessions.user_id and t.owner_id = auth.uid()
-    )
-  );
+  on public.training_sessions for select using (public.is_coach_of(user_id, auth.uid()));
 
 -- injuries
 drop policy if exists "Users manage own injuries" on public.injuries;
@@ -97,9 +113,7 @@ create policy "Users manage own injuries"
 drop policy if exists "Team members can view their team" on public.teams;
 create policy "Team members can view their team"
   on public.teams for select using (
-    auth.uid() = owner_id or exists (
-      select 1 from public.team_members where team_id = teams.id and user_id = auth.uid()
-    )
+    auth.uid() = owner_id or public.is_team_member(id, auth.uid())
   );
 
 drop policy if exists "Users can create teams" on public.teams;
@@ -114,9 +128,7 @@ create policy "Owners can update their teams"
 drop policy if exists "Members can view team membership" on public.team_members;
 create policy "Members can view team membership"
   on public.team_members for select using (
-    user_id = auth.uid() or exists (
-      select 1 from public.teams t where t.id = team_members.team_id and t.owner_id = auth.uid()
-    )
+    user_id = auth.uid() or public.is_team_owner(team_id, auth.uid())
   );
 
 drop policy if exists "Users can join teams" on public.team_members;
@@ -130,21 +142,9 @@ create policy "Users can leave teams"
 -- Coaches need to read their athletes' health snapshots for the team dashboard.
 drop policy if exists "Coaches view athlete snapshots" on public.health_snapshots;
 create policy "Coaches view athlete snapshots"
-  on public.health_snapshots for select using (
-    exists (
-      select 1 from public.team_members tm
-      join public.teams t on t.id = tm.team_id
-      where tm.user_id = health_snapshots.user_id and t.owner_id = auth.uid()
-    )
-  );
+  on public.health_snapshots for select using (public.is_coach_of(user_id, auth.uid()));
 
 -- Coaches need athlete names/profiles for the roster.
 drop policy if exists "Coaches view athlete profiles" on public.profiles;
 create policy "Coaches view athlete profiles"
-  on public.profiles for select using (
-    exists (
-      select 1 from public.team_members tm
-      join public.teams t on t.id = tm.team_id
-      where tm.user_id = profiles.id and t.owner_id = auth.uid()
-    )
-  );
+  on public.profiles for select using (public.is_coach_of(id, auth.uid()));
