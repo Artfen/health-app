@@ -1,7 +1,17 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { PaperPlaneTilt, Robot, User, Plus, Target, CheckCircle, Trash, CaretDown, ArrowCounterClockwise } from '@phosphor-icons/react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import { PaperPlaneTilt, Robot, User, Plus, Target, CheckCircle, Trash, CaretDown, ArrowCounterClockwise, Bandaids, CalendarCheck, X } from '@phosphor-icons/react';
+
+type Injury = {
+  id: string;
+  body_part: string;
+  description: string | null;
+  severity: string;
+  status: string;
+  started_on: string | null;
+};
 
 type Snapshot = Record<string, unknown>;
 type Objective = {
@@ -126,8 +136,46 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
   const [customDesc, setCustomDesc] = useState('');
   const [customDate, setCustomDate] = useState('');
   const [addingObjective, setAddingObjective] = useState(false);
+  const [injuries, setInjuries] = useState<Injury[]>([]);
+  const [showInjuryForm, setShowInjuryForm] = useState(false);
+  const [injuryPart, setInjuryPart] = useState('');
+  const [injurySeverity, setInjurySeverity] = useState('moderate');
+  const [calendarUpdated, setCalendarUpdated] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const loadInjuries = useCallback(async () => {
+    try {
+      const res = await fetch('/api/injuries');
+      const data = await res.json();
+      setInjuries((data.injuries ?? []).filter((i: Injury) => i.status === 'active'));
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { loadInjuries(); }, [loadInjuries]);
+
+  async function addInjury() {
+    if (!injuryPart.trim()) return;
+    const res = await fetch('/api/injuries', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body_part: injuryPart.trim(), severity: injurySeverity }),
+    });
+    const data = await res.json();
+    if (data.injury) setInjuries((prev) => [data.injury, ...prev]);
+    setInjuryPart('');
+    setInjurySeverity('moderate');
+    setShowInjuryForm(false);
+  }
+
+  async function resolveInjury(id: string) {
+    setInjuries((prev) => prev.filter((i) => i.id !== id));
+    await fetch('/api/injuries', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status: 'resolved' }) });
+  }
+
+  async function deleteInjury(id: string) {
+    setInjuries((prev) => prev.filter((i) => i.id !== id));
+    await fetch('/api/injuries', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+  }
 
   const activeObjective = objectives.find(o => o.status === 'active') ?? null;
   const today = snapshots[0];
@@ -166,6 +214,13 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
       });
 
       if (!res.body) throw new Error('No response body');
+
+      // The coach can edit the calendar / injuries via tools — refresh those
+      // panels when it does.
+      const mutated = res.headers.get('X-Coach-Mutated') ?? '';
+      if (mutated.includes('injuries')) loadInjuries();
+      if (mutated.includes('training')) setCalendarUpdated(true);
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
 
@@ -233,11 +288,11 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
   }
 
   const quickPrompts = [
-    'How is my recovery today?',
+    'Plan my training week',
     'What should I train today?',
-    'Analyse my sleep this week',
+    'How is my recovery today?',
     'Am I overtraining?',
-    activeObjective ? `How am I progressing toward my ${activeObjective.title}?` : 'What objective should I set?',
+    activeObjective ? `Build a plan for my ${activeObjective.title}` : 'What objective should I set?',
   ];
 
   return (
@@ -309,6 +364,65 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
           )}
         </div>
 
+        {/* Injuries */}
+        <div className="p-5 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5">
+              <Bandaids size={14} style={{ color: 'var(--text-2)' }} />
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Injuries</p>
+            </div>
+            <button onClick={() => setShowInjuryForm((v) => !v)}
+              className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
+              style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}>
+              {showInjuryForm ? <X size={13} /> : <Plus size={13} weight="bold" />}
+            </button>
+          </div>
+
+          {showInjuryForm && (
+            <div className="flex flex-col gap-2 mb-3">
+              <input type="text" value={injuryPart} onChange={(e) => setInjuryPart(e.target.value)}
+                placeholder="e.g. left knee"
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none"
+                style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }} />
+              <div className="flex gap-2">
+                <select value={injurySeverity} onChange={(e) => setInjurySeverity(e.target.value)}
+                  className="flex-1 px-3 py-2 rounded-lg text-xs outline-none cursor-pointer"
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }}>
+                  <option value="mild">Mild</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="severe">Severe</option>
+                </select>
+                <button onClick={addInjury} disabled={!injuryPart.trim()}
+                  className="px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-40"
+                  style={{ background: 'var(--accent)', color: '#fff' }}>Add</button>
+              </div>
+            </div>
+          )}
+
+          {injuries.length === 0 && !showInjuryForm ? (
+            <p className="text-xs" style={{ color: 'var(--text-3)' }}>None logged. Tell the coach if something hurts.</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {injuries.map((inj) => (
+                <div key={inj.id} className="flex items-center gap-2 px-2.5 py-2 rounded-lg"
+                  style={{ background: 'var(--red-bg)' }}>
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--red)' }} />
+                  <span className="text-xs flex-1 capitalize truncate" style={{ color: 'var(--text-1)' }}>
+                    {inj.body_part}
+                    <span className="ml-1" style={{ color: 'var(--text-3)' }}>· {inj.severity}</span>
+                  </span>
+                  <button onClick={() => resolveInjury(inj.id)} title="Mark healed" className="cursor-pointer" style={{ color: 'var(--green)' }}>
+                    <CheckCircle size={14} />
+                  </button>
+                  <button onClick={() => deleteInjury(inj.id)} title="Remove" className="cursor-pointer" style={{ color: 'var(--text-3)' }}>
+                    <Trash size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Today's metrics snapshot */}
         {today && (
           <div className="p-5">
@@ -367,6 +481,17 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
             </button>
           </div>
         </div>
+
+        {/* Calendar updated banner */}
+        {calendarUpdated && (
+          <Link href="/calendar" onClick={() => setCalendarUpdated(false)}
+            className="mx-6 mt-3 flex items-center gap-2.5 px-4 py-2.5 rounded-xl cursor-pointer"
+            style={{ background: 'color-mix(in srgb, var(--accent) 8%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 30%, var(--border))' }}>
+            <CalendarCheck size={16} style={{ color: 'var(--accent)' }} weight="fill" />
+            <span className="text-xs font-medium flex-1" style={{ color: 'var(--text-1)' }}>Your coach updated the calendar</span>
+            <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>View →</span>
+          </Link>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-4">
