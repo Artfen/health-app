@@ -1,8 +1,13 @@
 -- ============================================================
 -- v2 feature set: manual logging, training calendar, injuries, teams
 -- Run this whole file in the Supabase SQL Editor.
--- Safe to run once on top of the existing schema.
+-- Safe to run (and re-run) on top of the existing schema.
 -- ============================================================
+
+-- ------------------------------------------------------------
+-- TABLES (create everything first, so cross-referencing RLS
+-- policies below can always see the tables they depend on)
+-- ------------------------------------------------------------
 
 -- Feature 1: manual data entry — mark where a snapshot came from so manual
 -- entries (no wearable) and Garmin syncs can coexist.
@@ -23,26 +28,8 @@ create table if not exists public.training_sessions (
   created_by text default 'user' check (created_by in ('user', 'coach')),
   created_at timestamptz default now()
 );
-
 create index if not exists training_sessions_user_date_idx
   on public.training_sessions(user_id, date);
-
-alter table public.training_sessions enable row level security;
-
-drop policy if exists "Users manage own training sessions" on public.training_sessions;
-create policy "Users manage own training sessions"
-  on public.training_sessions for all using (auth.uid() = user_id);
-
--- Coaches can view their athletes' planned sessions (read-only).
-drop policy if exists "Coaches view athlete training" on public.training_sessions;
-create policy "Coaches view athlete training"
-  on public.training_sessions for select using (
-    exists (
-      select 1 from public.team_members tm
-      join public.teams t on t.id = tm.team_id
-      where tm.user_id = training_sessions.user_id and t.owner_id = auth.uid()
-    )
-  );
 
 -- Feature 3: injuries. The coach keeps these in account until resolved.
 create table if not exists public.injuries (
@@ -56,15 +43,8 @@ create table if not exists public.injuries (
   resolved_on date,
   created_at timestamptz default now()
 );
-
 create index if not exists injuries_user_status_idx
   on public.injuries(user_id, status);
-
-alter table public.injuries enable row level security;
-
-drop policy if exists "Users manage own injuries" on public.injuries;
-create policy "Users manage own injuries"
-  on public.injuries for all using (auth.uid() = user_id);
 
 -- Feature 5: teams (coach / personal trainer → athletes), joined via a short code.
 create table if not exists public.teams (
@@ -84,9 +64,36 @@ create table if not exists public.team_members (
   unique(team_id, user_id)
 );
 
+-- ------------------------------------------------------------
+-- ROW LEVEL SECURITY
+-- ------------------------------------------------------------
+
+alter table public.training_sessions enable row level security;
+alter table public.injuries enable row level security;
 alter table public.teams enable row level security;
 alter table public.team_members enable row level security;
 
+-- training_sessions
+drop policy if exists "Users manage own training sessions" on public.training_sessions;
+create policy "Users manage own training sessions"
+  on public.training_sessions for all using (auth.uid() = user_id);
+
+drop policy if exists "Coaches view athlete training" on public.training_sessions;
+create policy "Coaches view athlete training"
+  on public.training_sessions for select using (
+    exists (
+      select 1 from public.team_members tm
+      join public.teams t on t.id = tm.team_id
+      where tm.user_id = training_sessions.user_id and t.owner_id = auth.uid()
+    )
+  );
+
+-- injuries
+drop policy if exists "Users manage own injuries" on public.injuries;
+create policy "Users manage own injuries"
+  on public.injuries for all using (auth.uid() = user_id);
+
+-- teams
 drop policy if exists "Team members can view their team" on public.teams;
 create policy "Team members can view their team"
   on public.teams for select using (
@@ -103,6 +110,7 @@ drop policy if exists "Owners can update their teams" on public.teams;
 create policy "Owners can update their teams"
   on public.teams for update using (auth.uid() = owner_id);
 
+-- team_members
 drop policy if exists "Members can view team membership" on public.team_members;
 create policy "Members can view team membership"
   on public.team_members for select using (
