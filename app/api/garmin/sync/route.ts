@@ -69,71 +69,56 @@ export async function POST(request: NextRequest) {
 
   if (!tokens) return NextResponse.json({ error: 'Garmin not connected' }, { status: 400 });
 
-  const { date, backfill } = await request.json().catch(() => ({}));
+  const { date, backfill, days } = await request.json().catch(() => ({}));
 
   try {
     const storage = createSupabaseTokenStorage(user.id);
     const client = new GarminClient('', '', storage);
 
-    if (backfill) {
-      // Sync last 30 days one by one
-      const dates: string[] = [];
-      for (let i = 0; i < 30; i++) {
-        const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-        dates.push(d.toISOString().split('T')[0]!);
-      }
-
-      const snapshots = [];
-      for (const d of dates) {
-        try {
-          const snapshot = await syncDate(client, user.id, d);
-          snapshots.push(snapshot);
-          // Small delay to avoid rate limiting
-          await new Promise(r => setTimeout(r, 300));
-        } catch {
-          // skip days that fail
-        }
-      }
-
-      const { error } = await admin.from('health_snapshots').upsert(snapshots, { onConflict: 'user_id,date' });
-      if (error) throw new Error(`DB write failed: ${error.message}`);
-
-      return NextResponse.json({ success: true, synced: snapshots.length });
-    } else if (date) {
+    if (date) {
       // Explicit single-day sync
       const snapshot = await syncDate(client, user.id, date);
       const { error } = await admin.from('health_snapshots').upsert(snapshot, { onConflict: 'user_id,date' });
       if (error) throw new Error(`DB write failed: ${error.message}`);
       return NextResponse.json({ success: true, date, snapshot, syncedAt: new Date().toISOString() });
-    } else {
-      // Default "Sync now": pull today AND yesterday. Today keeps intraday
-      // metrics (steps, stress, body battery) current; yesterday catches
-      // overnight sleep + HRV, which Garmin often publishes late in the morning.
-      const today = new Date().toISOString().split('T')[0]!;
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]!;
-
-      const snapshots = [];
-      for (const d of [yesterday, today]) {
-        try {
-          snapshots.push(await syncDate(client, user.id, d));
-          await new Promise((r) => setTimeout(r, 250));
-        } catch {
-          // skip a day that fails rather than failing the whole sync
-        }
-      }
-
-      const { error } = await admin.from('health_snapshots').upsert(snapshots, { onConflict: 'user_id,date' });
-      if (error) throw new Error(`DB write failed: ${error.message}`);
-
-      const todaySnapshot = snapshots.find((s) => s.date === today) ?? null;
-      return NextResponse.json({
-        success: true,
-        date: today,
-        snapshot: todaySnapshot,
-        synced: snapshots.length,
-        syncedAt: new Date().toISOString(),
-      });
     }
+
+    // Range sync. Default "Sync now" pulls the last 7 days so the dashboard's
+    // 7-day window fills in; re-syncing prior days also catches sleep/HRV that
+    // Garmin publishes late. `backfill` does 30 days; `days` overrides (max 60).
+    const rangeDays = backfill ? 30 : (typeof days === 'number' && days > 0 ? Math.min(days, 60) : 7);
+    const today = new Date().toISOString().split('T')[0]!;
+
+    // Oldest → newest so the upserts land in chronological order.
+    const dates = Array.from({ length: rangeDays }, (_, i) =>
+      new Date(Date.now() - (rangeDays - 1 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0]!,
+    );
+
+    // Upsert each day as it's fetched so partial progress survives a timeout —
+    // a long range can exceed the serverless limit, and repeated syncs then
+    // fill in any days that didn't make it.
+    let synced = 0;
+    let todaySnapshot = null;
+    for (const d of dates) {
+      try {
+        const snapshot = await syncDate(client, user.id, d);
+        const { error } = await admin.from('health_snapshots').upsert(snapshot, { onConflict: 'user_id,date' });
+        if (error) throw new Error(`DB write failed: ${error.message}`);
+        synced++;
+        if (d === today) todaySnapshot = snapshot;
+        await new Promise((r) => setTimeout(r, 200)); // gentle on Garmin's rate limit
+      } catch {
+        // skip a day that fails rather than failing the whole sync
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      date: today,
+      snapshot: todaySnapshot,
+      synced,
+      syncedAt: new Date().toISOString(),
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Sync failed';
     console.error('[garmin/sync] error:', message);
