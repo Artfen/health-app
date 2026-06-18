@@ -5,15 +5,17 @@ import { GarminClient } from '@/lib/garmin/garmin-client';
 import { createSupabaseTokenStorage } from '@/lib/supabase/token-storage';
 
 async function syncDate(client: GarminClient, userId: string, syncDate: string) {
-  const [summary, sleep, hrv] = await Promise.allSettled([
+  const [summary, sleep, hrv, bb] = await Promise.allSettled([
     client.getDailySummary(syncDate),
     client.getSleepData(syncDate),
     client.getHRV(syncDate),
+    client.getBodyBatteryDay(syncDate),
   ]);
 
   const summaryData = summary.status === 'fulfilled' ? summary.value : null;
   const sleepData = sleep.status === 'fulfilled' ? sleep.value : null;
   const hrvData = hrv.status === 'fulfilled' ? hrv.value : null;
+  const bbData = bb.status === 'fulfilled' ? bb.value : { high: null, low: null };
 
   return {
     user_id: userId,
@@ -24,8 +26,8 @@ async function syncDate(client: GarminClient, userId: string, syncDate: string) 
     active_calories: summaryData?.activeKilocalories ?? null,
     resting_hr: summaryData?.restingHeartRateValue ?? null,
     avg_stress: summaryData?.averageStressLevel ?? null,
-    body_battery_high: summaryData?.bodyBatteryHighestValue ?? null,
-    body_battery_low: summaryData?.bodyBatteryLowestValue ?? null,
+    body_battery_high: bbData.high ?? summaryData?.bodyBatteryHighestValue ?? null,
+    body_battery_low: bbData.low ?? summaryData?.bodyBatteryLowestValue ?? null,
     sleep_seconds: sleepData?.dailySleepDTO?.deepSleepSeconds != null
       ? (sleepData.dailySleepDTO.deepSleepSeconds +
         sleepData.dailySleepDTO.lightSleepSeconds +

@@ -181,6 +181,33 @@ export class GarminClient {
     return raw;
   }
 
+  // The daily summary often returns null body-battery fields, so read the
+  // dedicated body-battery endpoint and reduce its time-series to a high/low.
+  // Each reading is typically [timestampGMT, status, level, version]; we take
+  // the level (index 2), falling back to index 1 for the shorter [ts, level] shape.
+  async getBodyBatteryDay(date: string): Promise<{ high: number | null; low: number | null }> {
+    try {
+      const raw = await this.auth.request<Array<{ bodyBatteryValuesArray?: unknown[] }>>(
+        `${ENDPOINTS.BODY_BATTERY}?startDate=${date}&endDate=${date}`,
+      );
+      const arr = raw?.[0]?.bodyBatteryValuesArray;
+      if (!Array.isArray(arr) || arr.length === 0) return { high: null, low: null };
+
+      const values: number[] = [];
+      for (const entry of arr) {
+        if (!Array.isArray(entry)) continue;
+        const level = typeof entry[2] === 'number' ? entry[2]
+          : typeof entry[1] === 'number' ? entry[1]
+          : null;
+        if (level != null && Number.isFinite(level)) values.push(level);
+      }
+      if (values.length === 0) return { high: null, low: null };
+      return { high: Math.max(...values), low: Math.min(...values) };
+    } catch {
+      return { high: null, low: null };
+    }
+  }
+
   async getActivities(limit = 20, start = 0): Promise<Activity[]> {
     return this.auth.request<Activity[]>(
       `${ENDPOINTS.ACTIVITIES}?limit=${limit}&start=${start}`,
