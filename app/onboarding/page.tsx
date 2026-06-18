@@ -16,6 +16,8 @@ export default function OnboardingPage() {
   const [error, setError] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [successSource, setSuccessSource] = useState<SuccessSource>('garmin');
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
 
   async function connectGarmin(e: React.FormEvent) {
     e.preventDefault();
@@ -30,6 +32,34 @@ export default function OnboardingPage() {
     setLoading(false);
     if (!res.ok) {
       setError(data.error ?? 'Connection failed');
+    } else if (data.mfaRequired) {
+      // Garmin emailed/texted a code — switch to the code-entry view.
+      setMfaRequired(true);
+    } else {
+      setDisplayName(data.displayName ?? 'Athlete');
+      setSuccessSource('garmin');
+      setStep('success');
+    }
+  }
+
+  async function submitMfaCode(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    const res = await fetch('/api/garmin/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mfaCode }),
+    });
+    const data = await res.json();
+    setLoading(false);
+    if (!res.ok) {
+      setError(data.error ?? 'Verification failed');
+      // Session expired server-side — send them back to re-enter credentials.
+      if (data.restart) {
+        setMfaRequired(false);
+        setMfaCode('');
+      }
     } else {
       setDisplayName(data.displayName ?? 'Athlete');
       setSuccessSource('garmin');
@@ -157,7 +187,19 @@ export default function OnboardingPage() {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center px-4" style={{ background: 'var(--bg)' }}>
         <div className="w-full max-w-sm">
-          <button onClick={() => setStep('choose')} className="text-sm mb-6 cursor-pointer" style={{ color: 'var(--text-3)' }}>
+          <button
+            onClick={() => {
+              if (mfaRequired) {
+                setMfaRequired(false);
+                setMfaCode('');
+                setError('');
+              } else {
+                setStep('choose');
+              }
+            }}
+            className="text-sm mb-6 cursor-pointer"
+            style={{ color: 'var(--text-3)' }}
+          >
             Back
           </button>
 
@@ -166,61 +208,101 @@ export default function OnboardingPage() {
           </div>
 
           <h2 className="text-2xl font-semibold tracking-tight text-center mb-2" style={{ color: 'var(--text-1)' }}>
-            Connect Garmin
+            {mfaRequired ? 'Enter your code' : 'Connect Garmin'}
           </h2>
           <p className="text-sm text-center mb-8" style={{ color: 'var(--text-2)' }}>
-            Your credentials are used only to fetch your data and are stored encrypted.
+            {mfaRequired
+              ? 'Garmin sent a verification code to your email or phone. Enter it below to finish connecting.'
+              : 'Your credentials are used only to fetch your data and are stored encrypted.'}
           </p>
 
-          <div className="rounded-2xl p-6" style={cardStyle}>
-            <form onSubmit={connectGarmin} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Garmin Connect email</label>
-                <input
-                  type="email"
-                  value={garminEmail}
-                  onChange={(e) => setGarminEmail(e.target.value)}
-                  placeholder="your@email.com"
-                  required
-                  className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }}
-                  onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
-                  onBlur={(e) => (e.target.style.borderColor = 'var(--border-strong)')}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Garmin Connect password</label>
-                <input
-                  type="password"
-                  value={garminPassword}
-                  onChange={(e) => setGarminPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }}
-                  onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
-                  onBlur={(e) => (e.target.style.borderColor = 'var(--border-strong)')}
-                />
-              </div>
-              {error && (
-                <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg" style={{ background: 'var(--red-bg)' }}>
-                  <Warning size={16} style={{ color: 'var(--red)', flexShrink: 0, marginTop: 1 }} />
-                  <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>
+          {mfaRequired ? (
+            <div className="rounded-2xl p-6" style={cardStyle}>
+              <form onSubmit={submitMfaCode} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Verification code</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value)}
+                    placeholder="123456"
+                    required
+                    autoFocus
+                    className="w-full px-4 py-3 rounded-xl text-sm outline-none tracking-[0.3em] text-center"
+                    style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }}
+                    onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
+                    onBlur={(e) => (e.target.style.borderColor = 'var(--border-strong)')}
+                  />
                 </div>
-              )}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 rounded-xl text-sm font-semibold mt-1 cursor-pointer disabled:opacity-50"
-                style={{ background: 'var(--accent)', color: 'white' }}
-              >
-                {loading ? 'Connecting...' : 'Connect'}
-              </button>
-            </form>
-          </div>
+                {error && (
+                  <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg" style={{ background: 'var(--red-bg)' }}>
+                    <Warning size={16} style={{ color: 'var(--red)', flexShrink: 0, marginTop: 1 }} />
+                    <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 rounded-xl text-sm font-semibold mt-1 cursor-pointer disabled:opacity-50"
+                  style={{ background: 'var(--accent)', color: 'white' }}
+                >
+                  {loading ? 'Verifying...' : 'Verify and connect'}
+                </button>
+              </form>
+            </div>
+          ) : (
+            <div className="rounded-2xl p-6" style={cardStyle}>
+              <form onSubmit={connectGarmin} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Garmin Connect email</label>
+                  <input
+                    type="email"
+                    value={garminEmail}
+                    onChange={(e) => setGarminEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    required
+                    className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                    style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }}
+                    onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
+                    onBlur={(e) => (e.target.style.borderColor = 'var(--border-strong)')}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Garmin Connect password</label>
+                  <input
+                    type="password"
+                    value={garminPassword}
+                    onChange={(e) => setGarminPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                    style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }}
+                    onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
+                    onBlur={(e) => (e.target.style.borderColor = 'var(--border-strong)')}
+                  />
+                </div>
+                {error && (
+                  <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg" style={{ background: 'var(--red-bg)' }}>
+                    <Warning size={16} style={{ color: 'var(--red)', flexShrink: 0, marginTop: 1 }} />
+                    <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 rounded-xl text-sm font-semibold mt-1 cursor-pointer disabled:opacity-50"
+                  style={{ background: 'var(--accent)', color: 'white' }}
+                >
+                  {loading ? 'Connecting...' : 'Connect'}
+                </button>
+              </form>
+            </div>
+          )}
 
           <p className="text-xs text-center mt-4" style={{ color: 'var(--text-3)' }}>
-            Note: Disable MFA on your Garmin account before connecting.
+            Works with 2FA enabled — we&apos;ll ask for your code if Garmin requires one.
           </p>
         </div>
       </div>

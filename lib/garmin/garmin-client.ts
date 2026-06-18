@@ -1,4 +1,4 @@
-import { GarminAuth, type TokenStorage } from './garmin-auth';
+import { GarminAuth, type TokenStorage, type ConnectResult, type GarminMfaState } from './garmin-auth';
 
 const GARMIN_CONNECT_API = 'https://connectapi.garmin.com';
 
@@ -140,6 +140,17 @@ export class GarminClient {
 
   constructor(email: string, password: string, storage: TokenStorage) {
     this.auth = new GarminAuth(email, password, storage);
+  }
+
+  // Begin connecting. Resolves with { mfaRequired: true } + resumable state when
+  // the account has 2FA enabled; otherwise completes auth and stores tokens.
+  async connect(): Promise<ConnectResult> {
+    return this.auth.connect();
+  }
+
+  // Finish a connect that paused for a 2FA code.
+  async completeMfa(mfaState: GarminMfaState, code: string): Promise<void> {
+    return this.auth.completeMfa(mfaState, code);
   }
 
   async getDailySummary(date: string): Promise<DailySummary> {
