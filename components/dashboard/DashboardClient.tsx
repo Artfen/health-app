@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useI18n } from '@/lib/i18n/I18nProvider';
 import {
   ArrowClockwise,
   Steps,
@@ -60,12 +61,12 @@ function fmtSleep(seconds: number | null) {
   return `${h}h ${m}m`;
 }
 
-function fmtShortDate(dateStr: string) {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+function fmtShortDate(dateStr: string, localeTag: string) {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString(localeTag, { weekday: 'short' });
 }
 
-function fmtDate(dateStr: string) {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
+function fmtDate(dateStr: string, localeTag: string) {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString(localeTag, {
     weekday: 'long', month: 'long', day: 'numeric',
   });
 }
@@ -145,6 +146,7 @@ export default function DashboardClient({
   userId: string;
 }) {
   const router = useRouter();
+  const { t, localeTag } = useI18n();
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
   const [logOpen, setLogOpen] = useState(false);
@@ -167,9 +169,13 @@ export default function DashboardClient({
     }
   }
 
-  const name = profile?.full_name?.split(' ')[0] ?? 'Athlete';
+  const name = profile?.full_name?.split(' ')[0] ?? t('dashboard.fallbackName');
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const greeting = hour < 12
+    ? t('dashboard.greetingMorning', { name })
+    : hour < 18
+      ? t('dashboard.greetingAfternoon', { name })
+      : t('dashboard.greetingEvening', { name });
 
   async function syncToday() {
     setSyncing(true);
@@ -185,24 +191,24 @@ export default function DashboardClient({
         window.location.href = '/dashboard';
       } else {
         setSyncing(false);
-        setSyncMsg(d.error ?? 'Sync failed');
+        setSyncMsg(d.error ?? t('dashboard.syncFailed'));
       }
     } catch {
       setSyncing(false);
-      setSyncMsg('Network error - try again');
+      setSyncMsg(t('dashboard.networkError'));
     }
   }
 
-  const t = todaySnapshot;
+  const snap = todaySnapshot;
   const prevSnap = weekSnapshots[weekSnapshots.length - 2] ?? null;
 
-  const stepsTrend = t?.steps && prevSnap?.steps
-    ? Math.round(((t.steps - prevSnap.steps) / prevSnap.steps) * 100) : null;
-  const sleepTrend = t?.sleep_seconds && prevSnap?.sleep_seconds
-    ? Math.round(((t.sleep_seconds - prevSnap.sleep_seconds) / prevSnap.sleep_seconds) * 100) : null;
+  const stepsTrend = snap?.steps && prevSnap?.steps
+    ? Math.round(((snap.steps - prevSnap.steps) / prevSnap.steps) * 100) : null;
+  const sleepTrend = snap?.sleep_seconds && prevSnap?.sleep_seconds
+    ? Math.round(((snap.sleep_seconds - prevSnap.sleep_seconds) / prevSnap.sleep_seconds) * 100) : null;
 
   const chartData = weekSnapshots.map((s) => ({
-    date: fmtShortDate(s.date),
+    date: fmtShortDate(s.date, localeTag),
     steps: s.steps ?? 0,
     hrv: s.hrv_last_night ? Math.round(s.hrv_last_night) : 0,
     sleep: s.sleep_seconds ? Math.round(s.sleep_seconds / 3600 * 10) / 10 : 0,
@@ -216,10 +222,10 @@ export default function DashboardClient({
       <div className="flex items-start justify-between mb-7">
         <div>
           <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>
-            {greeting}, {name}
+            {greeting}
           </h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>
-            Stay on top of your recovery and training load.
+            {t('dashboard.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -237,14 +243,14 @@ export default function DashboardClient({
                 : { background: 'var(--accent)', color: '#fff', boxShadow: 'var(--shadow-sm)' }
             }>
             <NotePencil size={15} />
-            <span className="hidden sm:inline">Log</span>
+            <span className="hidden sm:inline">{t('dashboard.log')}</span>
           </button>
           {profile?.garmin_connected && (
             <button onClick={syncToday} disabled={syncing}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium cursor-pointer disabled:opacity-40"
               style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)', boxShadow: 'var(--shadow-sm)' }}>
               <ArrowClockwise size={15} className={syncing ? 'animate-spin' : ''} />
-              <span className="hidden sm:inline">Sync now</span>
+              <span className="hidden sm:inline">{t('dashboard.syncNow')}</span>
             </button>
           )}
         </div>
@@ -257,14 +263,14 @@ export default function DashboardClient({
           <div className="flex items-center gap-3">
             <WifiHigh size={20} style={{ color: 'var(--amber)' }} />
             <div>
-              <p className="text-sm font-semibold" style={{ color: '#92400e' }}>Connect your Garmin Fenix</p>
-              <p className="text-xs mt-0.5" style={{ color: '#b45309' }}>Link your account to start syncing health data</p>
+              <p className="text-sm font-semibold" style={{ color: '#92400e' }}>{t('dashboard.connectBanner.title')}</p>
+              <p className="text-xs mt-0.5" style={{ color: '#b45309' }}>{t('dashboard.connectBanner.desc')}</p>
             </div>
           </div>
           <Link href="/onboarding"
             className="px-4 py-2 rounded-xl text-xs font-bold"
             style={{ background: 'var(--amber)', color: '#fff' }}>
-            Connect
+            {t('dashboard.connectBanner.action')}
           </Link>
         </div>
       )}
@@ -277,28 +283,28 @@ export default function DashboardClient({
 
           {/* 4 stat cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <StatCard label="Steps Today" value={t?.steps?.toLocaleString() ?? '--'} sub="goal: 10k"
+            <StatCard label={t('dashboard.stepsToday')} value={snap?.steps?.toLocaleString() ?? '--'} sub={t('dashboard.stepsGoal')}
               trend={stepsTrend} accent href="/activities" icon={<Steps size={16} />} />
-            <StatCard label="Sleep" value={fmtSleep(t?.sleep_seconds ?? null)}
-              sub={t?.sleep_score ? `Score ${t.sleep_score}` : 'last night'} trend={sleepTrend} href="/sleep" icon={<Moon size={16} />} />
-            <StatCard label="HRV" value={t?.hrv_last_night ? `${Math.round(t.hrv_last_night)} ms` : '--'}
-              sub={t?.hrv_status ?? 'last night'} href="/sleep" icon={<Heartbeat size={16} />} />
-            <StatCard label="Body Battery" value={t?.body_battery_current != null ? `${t.body_battery_current}` : t?.body_battery_high != null ? `${t.body_battery_high}` : '--'}
-              sub={t?.body_battery_high != null ? `Peak ${t.body_battery_high}` : 'now'} href="/activities" icon={<BatteryFull size={16} />} />
+            <StatCard label={t('metrics.sleep')} value={fmtSleep(snap?.sleep_seconds ?? null)}
+              sub={snap?.sleep_score ? t('dashboard.sleepScoreSub', { score: snap.sleep_score }) : t('dashboard.lastNight')} trend={sleepTrend} href="/sleep" icon={<Moon size={16} />} />
+            <StatCard label={t('metrics.hrv')} value={snap?.hrv_last_night ? `${Math.round(snap.hrv_last_night)} ms` : '--'}
+              sub={snap?.hrv_status ?? t('dashboard.lastNight')} href="/sleep" icon={<Heartbeat size={16} />} />
+            <StatCard label={t('metrics.bodyBattery')} value={snap?.body_battery_current != null ? `${snap.body_battery_current}` : snap?.body_battery_high != null ? `${snap.body_battery_high}` : '--'}
+              sub={snap?.body_battery_high != null ? t('dashboard.peak', { value: snap.body_battery_high }) : t('dashboard.now')} href="/activities" icon={<BatteryFull size={16} />} />
           </div>
 
           {/* Steps bar chart */}
           <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
             <div className="flex items-center justify-between mb-5">
               <div>
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Daily Steps</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Last 7 days</p>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('dashboard.stepsChart.title')}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{t('dashboard.stepsChart.subtitle')}</p>
               </div>
               <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-3)' }}>
                 <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--accent)' }} />
-                Today
+                {t('dashboard.stepsChart.legendToday')}
                 <span className="w-2.5 h-2.5 rounded-sm inline-block ml-2" style={{ background: 'var(--border)' }} />
-                Previous
+                {t('dashboard.stepsChart.legendPrevious')}
               </div>
             </div>
             {chartData.length > 0 ? (
@@ -317,15 +323,15 @@ export default function DashboardClient({
               </ResponsiveContainer>
             ) : (
               <div className="h-40 flex items-center justify-center rounded-xl" style={{ background: 'var(--surface-2)' }}>
-                <p className="text-sm" style={{ color: 'var(--text-3)' }}>Sync to see your step history</p>
+                <p className="text-sm" style={{ color: 'var(--text-3)' }}>{t('dashboard.stepsChart.empty')}</p>
               </div>
             )}
           </div>
 
           {/* HRV + Sleep mini charts */}
           <div className="grid grid-cols-2 gap-4">
-            <MiniChart title="HRV - 7 days" data={chartData} dataKey="hrv" color="#16a34a" unit="ms" href="/sleep" />
-            <MiniChart title="Sleep - 7 days" data={chartData} dataKey="sleep" color="#6366f1" unit="hrs" href="/sleep" />
+            <MiniChart title={t('dashboard.hrvChartTitle')} noDataLabel={t('dashboard.noData')} data={chartData} dataKey="hrv" color="#16a34a" unit="ms" href="/sleep" />
+            <MiniChart title={t('dashboard.sleepChartTitle')} noDataLabel={t('dashboard.noData')} data={chartData} dataKey="sleep" color="#6366f1" unit="hrs" href="/sleep" />
           </div>
         </div>
 
@@ -334,15 +340,15 @@ export default function DashboardClient({
 
           {/* Today detail list */}
           <HoverPanel href="/activities">
-            <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text-1)' }}>Today</p>
+            <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text-1)' }}>{t('common.today')}</p>
             <div className="flex flex-col">
               {[
-                { icon: <Lightning size={14} />, label: 'Avg Stress', value: t?.avg_stress ? `${t.avg_stress}` : '--', color: '#e8521c' },
-                { icon: <Flame size={14} />, label: 'Calories', value: t?.calories?.toLocaleString() ?? '--', color: '#f97316' },
-                { icon: <Heartbeat size={14} />, label: 'Resting HR', value: t?.resting_hr ? `${t.resting_hr} bpm` : '--', color: '#ec4899' },
-                { icon: <Gauge size={14} />, label: 'VO₂ Max', value: t?.vo2_max ? `${t.vo2_max}` : '--', color: '#10b981' },
-                { icon: <Timer size={14} />, label: 'Active time', value: t?.active_seconds ? `${Math.floor(t.active_seconds / 60)} min` : '--', color: '#06b6d4' },
-                { icon: <Steps size={14} />, label: 'Distance', value: t?.distance_meters ? `${(t.distance_meters / 1000).toFixed(1)} km` : '--', color: '#8b5cf6' },
+                { icon: <Lightning size={14} />, label: t('dashboard.detailAvgStress'), value: snap?.avg_stress ? `${snap.avg_stress}` : '--', color: '#e8521c' },
+                { icon: <Flame size={14} />, label: t('dashboard.detailCalories'), value: snap?.calories?.toLocaleString() ?? '--', color: '#f97316' },
+                { icon: <Heartbeat size={14} />, label: t('dashboard.detailRestingHr'), value: snap?.resting_hr ? `${snap.resting_hr} bpm` : '--', color: '#ec4899' },
+                { icon: <Gauge size={14} />, label: t('dashboard.detailVo2Max'), value: snap?.vo2_max ? `${snap.vo2_max}` : '--', color: '#10b981' },
+                { icon: <Timer size={14} />, label: t('dashboard.detailActiveTime'), value: snap?.active_seconds ? `${Math.floor(snap.active_seconds / 60)} min` : '--', color: '#06b6d4' },
+                { icon: <Steps size={14} />, label: t('dashboard.detailDistance'), value: snap?.distance_meters ? `${(snap.distance_meters / 1000).toFixed(1)} km` : '--', color: '#8b5cf6' },
               ].map(({ icon, label, value, color }, i, arr) => (
                 <div key={label} className="flex items-center justify-between py-3"
                   style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
@@ -362,18 +368,18 @@ export default function DashboardClient({
           {/* Body battery gauge */}
           <HoverPanel href="/activities">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Body Battery</p>
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('metrics.bodyBattery')}</p>
               <BatteryFull size={16} style={{ color: 'var(--accent)' }} />
             </div>
             {(() => {
-              const bb = t?.body_battery_current ?? t?.body_battery_high ?? null;
+              const bb = snap?.body_battery_current ?? snap?.body_battery_high ?? null;
               return (
                 <>
                   <div className="flex items-baseline gap-2 mb-3">
                     <p className="text-4xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>
                       {bb ?? '--'}
                     </p>
-                    {bb != null && <p className="text-sm" style={{ color: 'var(--text-3)' }}>/ 100 now</p>}
+                    {bb != null && <p className="text-sm" style={{ color: 'var(--text-3)' }}>{t('dashboard.bodyBatteryOutOf')}</p>}
                   </div>
                   {bb != null && (
                     <>
@@ -385,8 +391,8 @@ export default function DashboardClient({
                           }} />
                       </div>
                       <div className="flex justify-between text-xs" style={{ color: 'var(--text-3)' }}>
-                        <span>Low: {t?.body_battery_low ?? '--'}</span>
-                        <span>Peak: {t?.body_battery_high ?? '--'}</span>
+                        <span>{t('dashboard.bodyBatteryLow', { value: snap?.body_battery_low ?? '--' })}</span>
+                        <span>{t('dashboard.bodyBatteryPeak', { value: snap?.body_battery_high ?? '--' })}</span>
                       </div>
                     </>
                   )}
@@ -398,12 +404,12 @@ export default function DashboardClient({
           {/* Quick nav tiles */}
           <div className="grid grid-cols-2 gap-3">
             {[
-              { href: '/calendar', label: 'Calendar', desc: 'Plan training', color: 'var(--accent)' },
-              { href: '/coach', label: 'AI Coach', desc: 'Get coached', color: '#d97706' },
-              { href: '/sleep', label: 'Sleep', desc: 'Recovery', color: '#6366f1' },
-              { href: '/activities', label: 'Activities', desc: 'Training log', color: '#06b6d4' },
-              { href: '/group', label: 'Group', desc: 'Compete', color: '#16a34a' },
-              { href: '/team', label: 'Team', desc: 'Coach view', color: '#db2777' },
+              { href: '/calendar', label: t('dashboard.tiles.calendar'), desc: t('dashboard.tiles.calendarDesc'), color: 'var(--accent)' },
+              { href: '/coach', label: t('dashboard.tiles.coach'), desc: t('dashboard.tiles.coachDesc'), color: '#d97706' },
+              { href: '/sleep', label: t('dashboard.tiles.sleep'), desc: t('dashboard.tiles.sleepDesc'), color: '#6366f1' },
+              { href: '/activities', label: t('dashboard.tiles.activities'), desc: t('dashboard.tiles.activitiesDesc'), color: '#06b6d4' },
+              { href: '/group', label: t('dashboard.tiles.group'), desc: t('dashboard.tiles.groupDesc'), color: '#16a34a' },
+              { href: '/team', label: t('dashboard.tiles.team'), desc: t('dashboard.tiles.teamDesc'), color: '#db2777' },
             ].map(({ href, label, desc, color }) => (
               <NavTile key={href} href={href} label={label} desc={desc} color={color} />
             ))}
@@ -419,25 +425,25 @@ export default function DashboardClient({
           <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-6 max-h-[90dvh] overflow-y-auto"
             style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <div className="flex items-center justify-between mb-1">
-              <h3 className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>Log your day</h3>
+              <h3 className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>{t('dashboard.modal.title')}</h3>
               <button onClick={() => setLogOpen(false)} className="cursor-pointer" style={{ color: 'var(--text-3)' }}><X size={18} /></button>
             </div>
             <p className="text-xs mb-5" style={{ color: 'var(--text-3)' }}>
-              No wearable? Enter whatever you have. Everything is optional.
+              {t('dashboard.modal.hint')}
             </p>
 
             <div className="flex flex-col gap-3.5">
-              <LogField label="Date">
+              <LogField label={t('dashboard.modal.date')}>
                 <input type="date" value={logForm.date ?? ''} onChange={(e) => setLogForm({ ...logForm, date: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none" style={logInputStyle} />
               </LogField>
 
               <div className="grid grid-cols-2 gap-3">
-                <LogField label="Steps"><LogInput k="steps" placeholder="8000" form={logForm} set={setLogForm} /></LogField>
-                <LogField label="Calories"><LogInput k="calories" placeholder="2200" form={logForm} set={setLogForm} /></LogField>
+                <LogField label={t('dashboard.modal.steps')}><LogInput k="steps" placeholder="8000" form={logForm} set={setLogForm} /></LogField>
+                <LogField label={t('dashboard.modal.calories')}><LogInput k="calories" placeholder="2200" form={logForm} set={setLogForm} /></LogField>
               </div>
 
-              <LogField label="Sleep">
+              <LogField label={t('dashboard.modal.sleep')}>
                 <div className="flex gap-2">
                   <div className="flex-1 flex items-center gap-1.5 px-3 rounded-xl" style={logInputStyle}>
                     <LogInput k="sleep_hours" placeholder="7" form={logForm} set={setLogForm} bare />
@@ -451,29 +457,29 @@ export default function DashboardClient({
               </LogField>
 
               <div className="grid grid-cols-2 gap-3">
-                <LogField label="Resting HR (bpm)"><LogInput k="resting_hr" placeholder="55" form={logForm} set={setLogForm} /></LogField>
-                <LogField label="HRV (ms)"><LogInput k="hrv_last_night" placeholder="60" form={logForm} set={setLogForm} /></LogField>
+                <LogField label={t('dashboard.modal.restingHr')}><LogInput k="resting_hr" placeholder="55" form={logForm} set={setLogForm} /></LogField>
+                <LogField label={t('dashboard.modal.hrv')}><LogInput k="hrv_last_night" placeholder="60" form={logForm} set={setLogForm} /></LogField>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <LogField label="Body battery"><LogInput k="body_battery_high" placeholder="80" form={logForm} set={setLogForm} /></LogField>
-                <LogField label="Avg stress"><LogInput k="avg_stress" placeholder="30" form={logForm} set={setLogForm} /></LogField>
+                <LogField label={t('dashboard.modal.bodyBattery')}><LogInput k="body_battery_high" placeholder="80" form={logForm} set={setLogForm} /></LogField>
+                <LogField label={t('dashboard.modal.avgStress')}><LogInput k="avg_stress" placeholder="30" form={logForm} set={setLogForm} /></LogField>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <LogField label="VO₂ max"><LogInput k="vo2_max" placeholder="48" form={logForm} set={setLogForm} /></LogField>
+                <LogField label={t('dashboard.modal.vo2max')}><LogInput k="vo2_max" placeholder="48" form={logForm} set={setLogForm} /></LogField>
                 <div />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <LogField label="Distance (km)"><LogInput k="distance_km" placeholder="5" form={logForm} set={setLogForm} /></LogField>
-                <LogField label="Active (min)"><LogInput k="active_minutes" placeholder="45" form={logForm} set={setLogForm} /></LogField>
+                <LogField label={t('dashboard.modal.distance')}><LogInput k="distance_km" placeholder="5" form={logForm} set={setLogForm} /></LogField>
+                <LogField label={t('dashboard.modal.activeMinutes')}><LogInput k="active_minutes" placeholder="45" form={logForm} set={setLogForm} /></LogField>
               </div>
 
               <button onClick={saveLog} disabled={logSaving}
                 className="w-full py-3 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50 mt-1"
                 style={{ background: 'var(--accent)', color: '#fff' }}>
-                {logSaving ? 'Saving...' : 'Save entry'}
+                {logSaving ? t('common.saving') : t('dashboard.modal.save')}
               </button>
             </div>
           </div>
@@ -556,8 +562,9 @@ function NavTile({ href, label, desc, color }: { href: string; label: string; de
   );
 }
 
-function MiniChart({ title, data, dataKey, color, unit, href }: {
+function MiniChart({ title, noDataLabel, data, dataKey, color, unit, href }: {
   title: string;
+  noDataLabel: string;
   data: Array<Record<string, string | number>>;
   dataKey: string;
   color: string;
@@ -588,7 +595,7 @@ function MiniChart({ title, data, dataKey, color, unit, href }: {
         </ResponsiveContainer>
       ) : (
         <div className="h-[75px] flex items-center justify-center">
-          <p className="text-xs" style={{ color: 'var(--text-3)' }}>No data</p>
+          <p className="text-xs" style={{ color: 'var(--text-3)' }}>{noDataLabel}</p>
         </div>
       )}
     </Link>

@@ -3,6 +3,7 @@
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts';
+import { useI18n } from '@/lib/i18n/I18nProvider';
 
 type SleepSnapshot = {
   date: string;
@@ -19,8 +20,8 @@ function toHours(seconds: number | null) {
   return Math.round((seconds / 3600) * 10) / 10;
 }
 
-function fmtShortDate(dateStr: string) {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+function fmtShortDate(dateStr: string, localeTag: string) {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString(localeTag, { weekday: 'short' });
 }
 
 function fmtSleep(seconds: number | null) {
@@ -57,13 +58,14 @@ function SleepStat({ label, value, color }: { label: string; value: string; colo
 }
 
 export default function SleepClient({ snapshots }: { snapshots: SleepSnapshot[] }) {
+  const { t, localeTag } = useI18n();
   const latest = snapshots[snapshots.length - 1];
 
   const chartData = snapshots.map((s) => ({
-    date: fmtShortDate(s.date),
-    'Deep': toHours(s.deep_sleep_seconds),
-    'REM': toHours(s.rem_sleep_seconds),
-    'Light': toHours(
+    date: fmtShortDate(s.date, localeTag),
+    [t('sleep.legend.deep')]: toHours(s.deep_sleep_seconds),
+    [t('sleep.legend.rem')]: toHours(s.rem_sleep_seconds),
+    [t('sleep.legend.light')]: toHours(
       s.sleep_seconds && s.deep_sleep_seconds && s.rem_sleep_seconds
         ? s.sleep_seconds - s.deep_sleep_seconds - s.rem_sleep_seconds
         : null
@@ -75,8 +77,8 @@ export default function SleepClient({ snapshots }: { snapshots: SleepSnapshot[] 
 
       {/* Header */}
       <div className="mb-7">
-        <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>Sleep</h1>
-        <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>Recovery and sleep quality</p>
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>{t('nav.sleep')}</h1>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{t('sleep.subtitle')}</p>
       </div>
 
       {/* HRV banner */}
@@ -84,7 +86,7 @@ export default function SleepClient({ snapshots }: { snapshots: SleepSnapshot[] 
         <div className="flex items-center justify-between rounded-2xl px-6 py-4 mb-6"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>Last night HRV</p>
+            <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>{t('sleep.lastNightHrv')}</p>
             <p className="text-3xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>
               {Math.round(latest.hrv_last_night)}
               <span className="text-base font-normal ml-1" style={{ color: 'var(--text-3)' }}>ms</span>
@@ -96,7 +98,7 @@ export default function SleepClient({ snapshots }: { snapshots: SleepSnapshot[] 
                 background: `${STATUS_COLORS[latest.hrv_status] ?? '#6366f1'}15`,
                 color: STATUS_COLORS[latest.hrv_status] ?? '#6366f1',
               }}>
-              {latest.hrv_status}
+              {t(`sleep.status.${latest.hrv_status}`)}
             </span>
           )}
         </div>
@@ -105,10 +107,10 @@ export default function SleepClient({ snapshots }: { snapshots: SleepSnapshot[] 
       {/* Sleep stage stats */}
       {latest && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-          <SleepStat label="Total sleep" value={fmtSleep(latest.sleep_seconds)} color="#6366f1" />
-          <SleepStat label="Deep sleep" value={fmtSleep(latest.deep_sleep_seconds)} color="#4338ca" />
-          <SleepStat label="REM sleep" value={fmtSleep(latest.rem_sleep_seconds)} color="#818cf8" />
-          <SleepStat label="Sleep score" value={latest.sleep_score ? `${latest.sleep_score}` : '--'} color="#22c55e" />
+          <SleepStat label={t('metrics.totalSleep')} value={fmtSleep(latest.sleep_seconds)} color="#6366f1" />
+          <SleepStat label={t('metrics.deepSleep')} value={fmtSleep(latest.deep_sleep_seconds)} color="#4338ca" />
+          <SleepStat label={t('metrics.remSleep')} value={fmtSleep(latest.rem_sleep_seconds)} color="#818cf8" />
+          <SleepStat label={t('metrics.sleepScore')} value={latest.sleep_score ? `${latest.sleep_score}` : '--'} color="#22c55e" />
         </div>
       )}
 
@@ -117,8 +119,8 @@ export default function SleepClient({ snapshots }: { snapshots: SleepSnapshot[] 
         <div className="rounded-2xl p-6" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
           <div className="flex items-center justify-between mb-5">
             <div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Sleep stages</p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Last 7 nights</p>
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('sleep.stagesTitle')}</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{t('sleep.lastNights', { count: chartData.length })}</p>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={220}>
@@ -128,16 +130,16 @@ export default function SleepClient({ snapshots }: { snapshots: SleepSnapshot[] 
               <YAxis tick={{ fill: 'var(--text-3)', fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--surface-2)' }} />
               <Legend wrapperStyle={{ fontSize: 12, color: 'var(--text-2)' }} />
-              <Bar dataKey="Deep" stackId="a" fill="#4338ca" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="REM" stackId="a" fill="#818cf8" />
-              <Bar dataKey="Light" stackId="a" fill="#c7d2fe" radius={[5, 5, 0, 0]} />
+              <Bar dataKey={t('sleep.legend.deep')} stackId="a" fill="#4338ca" radius={[0, 0, 0, 0]} />
+              <Bar dataKey={t('sleep.legend.rem')} stackId="a" fill="#818cf8" />
+              <Bar dataKey={t('sleep.legend.light')} stackId="a" fill="#c7d2fe" radius={[5, 5, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       ) : (
         <div className="rounded-2xl p-12 text-center" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No sleep data yet</p>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>Sync your Garmin from the dashboard to see sleep data.</p>
+          <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{t('sleep.emptyTitle')}</p>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>{t('sleep.emptyDesc')}</p>
         </div>
       )}
     </div>

@@ -6,6 +6,7 @@ import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Legend,
 } from 'recharts';
+import { useI18n } from '@/lib/i18n/I18nProvider';
 
 export type Member = { id: string; full_name: string | null; email: string; garmin_display_name: string | null };
 export type Snapshot = { date: string; steps: number | null; sleep_seconds: number | null; hrv_last_night: number | null; body_battery_high: number | null; body_battery_current: number | null; active_seconds: number | null; calories: number | null; resting_hr: number | null; vo2_max: number | null };
@@ -30,8 +31,8 @@ function avg(snaps: Snapshot[], key: keyof Snapshot) {
   return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
 }
 
-function fmtShortDate(dateStr: string) {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+function fmtShortDate(dateStr: string, localeTag: string) {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString(localeTag, { weekday: 'short' });
 }
 
 function fmtSleep(seconds: number) {
@@ -50,9 +51,9 @@ const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: 
   );
 };
 
-function Leaderboard({ label, icon, members, memberSnapshots, snapKey, color, formatFn, lowerBetter }: {
+function Leaderboard({ label, icon, members, memberSnapshots, snapKey, color, formatFn, lowerBetter, avgLabel }: {
   label: string; icon: React.ReactNode; members: Member[]; memberSnapshots: Record<string, Snapshot[]>;
-  snapKey: keyof Snapshot; color: string; formatFn?: (v: number) => string; lowerBetter?: boolean;
+  snapKey: keyof Snapshot; color: string; formatFn?: (v: number) => string; lowerBetter?: boolean; avgLabel: string;
 }) {
   const ranked = members.map((m) => ({ member: m, value: avg(memberSnapshots[m.id] ?? [], snapKey) }))
     .sort((a, b) => lowerBetter
@@ -65,7 +66,7 @@ function Leaderboard({ label, icon, members, memberSnapshots, snapKey, color, fo
       <div className="flex items-center gap-2 mb-4">
         <span style={{ color }}>{icon}</span>
         <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{label}</p>
-        <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>7-day avg</span>
+        <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>{avgLabel}</span>
       </div>
       <div className="flex flex-col gap-3">
         {ranked.map(({ member, value }, i) => (
@@ -88,6 +89,7 @@ function Leaderboard({ label, icon, members, memberSnapshots, snapKey, color, fo
 const inputStyle = { background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' };
 
 export default function GroupClient({ userId, groups }: { userId: string; groups: GroupData[] }) {
+  const { t, localeTag } = useI18n();
   const [selected, setSelected] = useState(0);
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<null | 'create' | 'join'>(groups.length === 0 ? null : null);
@@ -105,7 +107,7 @@ export default function GroupClient({ userId, groups }: { userId: string; groups
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     setLoading(false);
     if (res.ok) window.location.reload();
-    else setError((await res.json()).error ?? 'Something went wrong');
+    else setError((await res.json()).error ?? t('common.error'));
   }
 
   function copyCode() {
@@ -120,29 +122,29 @@ export default function GroupClient({ userId, groups }: { userId: string; groups
     return (
       <div className="px-6 py-6 pb-24 lg:pb-8 max-w-[1280px] mx-auto">
         <div className="mb-7">
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>Groups</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>Compare health metrics with friends and partners</p>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>{t('nav.group')}</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{t('group.subtitle')}</p>
         </div>
         {mode === null ? (
           <div className="rounded-2xl p-10 text-center max-w-md mx-auto" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}>
               <Users size={28} />
             </div>
-            <p className="text-base font-semibold mb-2" style={{ color: 'var(--text-1)' }}>No groups yet</p>
+            <p className="text-base font-semibold mb-2" style={{ color: 'var(--text-1)' }}>{t('group.emptyTitle')}</p>
             <p className="text-sm mb-8 max-w-xs mx-auto" style={{ color: 'var(--text-2)' }}>
-              Create a group to share health data with friends, or join one with a code. You can be in as many as you like.
+              {t('group.emptyDesc')}
             </p>
             <div className="flex gap-3 justify-center">
               <button onClick={() => { setMode('create'); setText(''); setError(''); }} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer" style={{ background: 'var(--accent)', color: '#fff' }}>
-                <Plus size={16} /> Create group
+                <Plus size={16} /> {t('group.createGroup')}
               </button>
               <button onClick={() => { setMode('join'); setText(''); setError(''); }} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-                <ArrowRight size={16} /> Join with code
+                <ArrowRight size={16} /> {t('group.joinWithCode')}
               </button>
             </div>
           </div>
         ) : (
-          <CreateJoinForm mode={mode} text={text} setText={setText} error={error} loading={loading} submit={submit} onCancel={() => setMode(null)} inline />
+          <CreateJoinForm mode={mode} text={text} setText={setText} error={error} loading={loading} submit={submit} onCancel={() => setMode(null)} t={t} inline />
         )}
       </div>
     );
@@ -153,7 +155,7 @@ export default function GroupClient({ userId, groups }: { userId: string; groups
   const allDates = [...new Set(Object.values(memberSnapshots).flat().map((s) => s.date))].sort();
 
   const stepsData = allDates.map((date) => {
-    const entry: Record<string, string | number> = { date: fmtShortDate(date) };
+    const entry: Record<string, string | number> = { date: fmtShortDate(date, localeTag) };
     members.forEach((m) => { entry[getName(m)] = memberSnapshots[m.id]?.find((s) => s.date === date)?.steps ?? 0; });
     return entry;
   });
@@ -174,14 +176,14 @@ export default function GroupClient({ userId, groups }: { userId: string; groups
       <div className="flex items-start justify-between mb-5 gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>{group!.name}</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{members.length} member{members.length !== 1 ? 's' : ''}</p>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{t('group.members', { count: members.length })}</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => { setMode('join'); setText(''); setError(''); }} className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-sm font-medium cursor-pointer" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-            <ArrowRight size={14} /> Join
+            <ArrowRight size={14} /> {t('common.join')}
           </button>
           <button onClick={() => { setMode('create'); setText(''); setError(''); }} className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-sm font-medium cursor-pointer" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-            <Plus size={14} /> New
+            <Plus size={14} /> {t('common.new')}
           </button>
           <button onClick={copyCode} className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-medium cursor-pointer" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)', boxShadow: 'var(--shadow-sm)' }}>
             {copied ? <Check size={15} style={{ color: 'var(--green)' }} /> : <Copy size={15} />}
@@ -217,7 +219,7 @@ export default function GroupClient({ userId, groups }: { userId: string; groups
               <p className="text-sm font-semibold leading-tight" style={{ color: 'var(--text-1)' }}>{getName(m)}</p>
               {m.garmin_display_name && <p className="text-xs" style={{ color: 'var(--text-3)' }}>{m.garmin_display_name}</p>}
             </div>
-            {m.id === userId && <span className="text-xs px-1.5 py-0.5 rounded font-medium ml-1" style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}>you</span>}
+            {m.id === userId && <span className="text-xs px-1.5 py-0.5 rounded font-medium ml-1" style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}>{t('group.youBadge')}</span>}
           </div>
         ))}
       </div>
@@ -225,9 +227,9 @@ export default function GroupClient({ userId, groups }: { userId: string; groups
       {/* No-data hint */}
       {!hasData && (
         <div className="rounded-2xl p-6 text-center mb-6" style={{ background: 'var(--surface)', border: '1px dashed var(--border-strong)' }}>
-          <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No data to compare yet</p>
+          <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{t('group.noDataTitle')}</p>
           <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-            Once members sync their Garmin or log a day, the leaderboard and charts fill in here.
+            {t('group.noDataDesc')}
           </p>
         </div>
       )}
@@ -236,17 +238,17 @@ export default function GroupClient({ userId, groups }: { userId: string; groups
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-4">
           <Trophy size={16} style={{ color: '#d97706' }} />
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>7-day leaderboard</h2>
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('group.leaderboardTitle')}</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Leaderboard label="Steps" icon={<Steps size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="steps" color={MEMBER_COLORS[0]!} />
-          <Leaderboard label="Sleep" icon={<Moon size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="sleep_seconds" color="#6366f1" formatFn={(v) => v ? fmtSleep(v) : '--'} />
-          <Leaderboard label="HRV" icon={<Heartbeat size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="hrv_last_night" color="#16a34a" formatFn={(v) => `${v} ms`} />
-          <Leaderboard label="Body Battery" icon={<BatteryFull size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="body_battery_high" color="#d97706" />
-          <Leaderboard label="Active Time" icon={<Timer size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="active_seconds" color="#06b6d4" formatFn={(v) => `${Math.floor(v / 60)} min`} />
-          <Leaderboard label="Resting HR" icon={<Pulse size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="resting_hr" color="#ec4899" formatFn={(v) => v ? `${v} bpm` : '--'} lowerBetter />
-          <Leaderboard label="VO₂ Max" icon={<Gauge size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="vo2_max" color="#10b981" />
-          <Leaderboard label="Calories" icon={<Flame size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="calories" color="#f97316" formatFn={(v) => v ? `${v.toLocaleString()} kcal` : '--'} />
+          <Leaderboard label={t('metrics.steps')} avgLabel={t('group.sevenDayAvg')} icon={<Steps size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="steps" color={MEMBER_COLORS[0]!} />
+          <Leaderboard label={t('metrics.sleep')} avgLabel={t('group.sevenDayAvg')} icon={<Moon size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="sleep_seconds" color="#6366f1" formatFn={(v) => v ? fmtSleep(v) : '--'} />
+          <Leaderboard label={t('metrics.hrv')} avgLabel={t('group.sevenDayAvg')} icon={<Heartbeat size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="hrv_last_night" color="#16a34a" formatFn={(v) => `${v} ms`} />
+          <Leaderboard label={t('metrics.bodyBattery')} avgLabel={t('group.sevenDayAvg')} icon={<BatteryFull size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="body_battery_high" color="#d97706" />
+          <Leaderboard label={t('metrics.activeTime')} avgLabel={t('group.sevenDayAvg')} icon={<Timer size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="active_seconds" color="#06b6d4" formatFn={(v) => `${Math.floor(v / 60)} min`} />
+          <Leaderboard label={t('metrics.restingHr')} avgLabel={t('group.sevenDayAvg')} icon={<Pulse size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="resting_hr" color="#ec4899" formatFn={(v) => v ? `${v} bpm` : '--'} lowerBetter />
+          <Leaderboard label={t('metrics.vo2max')} avgLabel={t('group.sevenDayAvg')} icon={<Gauge size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="vo2_max" color="#10b981" />
+          <Leaderboard label={t('metrics.calories')} avgLabel={t('group.sevenDayAvg')} icon={<Flame size={15} />} members={members} memberSnapshots={memberSnapshots} snapKey="calories" color="#f97316" formatFn={(v) => v ? `${v.toLocaleString()} kcal` : '--'} />
         </div>
       </div>
 
@@ -254,7 +256,7 @@ export default function GroupClient({ userId, groups }: { userId: string; groups
       {members.length >= 2 && hasData && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
-            <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text-1)' }}>Health radar</p>
+            <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text-1)' }}>{t('group.healthRadar')}</p>
             <ResponsiveContainer width="100%" height={240}>
               <RadarChart data={radarData}>
                 <PolarGrid stroke="var(--border)" />
@@ -268,7 +270,7 @@ export default function GroupClient({ userId, groups }: { userId: string; groups
             </ResponsiveContainer>
           </div>
           <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
-            <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text-1)' }}>Steps comparison</p>
+            <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text-1)' }}>{t('group.stepsComparison')}</p>
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={stepsData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -291,10 +293,10 @@ export default function GroupClient({ userId, groups }: { userId: string; groups
           onClick={(e) => { if (e.target === e.currentTarget) setMode(null); }}>
           <div className="w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl p-6" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>{mode === 'create' ? 'Create a group' : 'Join a group'}</h3>
+              <h3 className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>{mode === 'create' ? t('group.createTitle') : t('group.joinTitle')}</h3>
               <button onClick={() => setMode(null)} className="cursor-pointer" style={{ color: 'var(--text-3)' }}><X size={18} /></button>
             </div>
-            <CreateJoinForm mode={mode} text={text} setText={setText} error={error} loading={loading} submit={submit} onCancel={() => setMode(null)} />
+            <CreateJoinForm mode={mode} text={text} setText={setText} error={error} loading={loading} submit={submit} onCancel={() => setMode(null)} t={t} />
           </div>
         </div>
       )}
@@ -302,28 +304,28 @@ export default function GroupClient({ userId, groups }: { userId: string; groups
   );
 }
 
-function CreateJoinForm({ mode, text, setText, error, loading, submit, onCancel, inline }: {
+function CreateJoinForm({ mode, text, setText, error, loading, submit, onCancel, t, inline }: {
   mode: 'create' | 'join'; text: string; setText: (s: string) => void; error: string; loading: boolean;
-  submit: (e: React.FormEvent) => void; onCancel: () => void; inline?: boolean;
+  submit: (e: React.FormEvent) => void; onCancel: () => void; t: (key: string, vars?: Record<string, string | number>) => string; inline?: boolean;
 }) {
   return (
     <form onSubmit={submit} className={inline ? 'flex flex-col gap-4 rounded-2xl p-6 max-w-sm mx-auto' : 'flex flex-col gap-4'}
       style={inline ? { background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' } : undefined}>
-      {inline && <h2 className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>{mode === 'create' ? 'Create a group' : 'Join a group'}</h2>}
+      {inline && <h2 className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>{mode === 'create' ? t('group.createTitle') : t('group.joinTitle')}</h2>}
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{mode === 'create' ? 'Group name' : 'Invite code'}</label>
+        <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{mode === 'create' ? t('group.groupNameLabel') : t('group.inviteCodeLabel')}</label>
         <input type="text" value={text}
           onChange={(e) => setText(mode === 'create' ? e.target.value : e.target.value.toUpperCase())}
-          placeholder={mode === 'create' ? 'e.g. M&M\'s' : 'Enter 8-character code'}
+          placeholder={mode === 'create' ? t('group.groupNamePlaceholder') : t('group.inviteCodePlaceholder')}
           required autoFocus className="w-full px-4 py-3 rounded-xl text-sm outline-none" style={inputStyle} />
       </div>
       {error && <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50" style={{ background: 'var(--accent)', color: '#fff' }}>
-          {loading ? 'Loading...' : mode === 'create' ? 'Create' : 'Join'}
+          {loading ? t('common.loading') : mode === 'create' ? t('common.create') : t('common.join')}
         </button>
         <button type="button" onClick={onCancel} className="px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-          Cancel
+          {t('common.cancel')}
         </button>
       </div>
     </form>

@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Pulse } from '@phosphor-icons/react';
+import { useI18n } from '@/lib/i18n/I18nProvider';
 
 export default function LoginPage() {
+  const { t } = useI18n();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,13 +39,13 @@ export default function LoginPage() {
         </div>
         <div>
           <p className="text-white/90 text-3xl font-bold leading-snug mb-4">
-            Track your health.<br />Beat your friends.
+            {t('auth.tagline')}
           </p>
           <p className="text-white/60 text-sm leading-relaxed max-w-xs">
-            Connect your Garmin Fenix and see all your health metrics in one clean dashboard.
+            {t('auth.taglineDesc')}
           </p>
         </div>
-        <p className="text-white/40 text-xs">PulseSync - Garmin Health Dashboard</p>
+        <p className="text-white/40 text-xs">{t('auth.brandFooter')}</p>
       </div>
 
       {/* Form */}
@@ -56,19 +58,19 @@ export default function LoginPage() {
             <span className="font-bold text-base" style={{ color: 'var(--text-1)' }}>PulseSync</span>
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight mb-1" style={{ color: 'var(--text-1)' }}>Welcome back</h1>
-          <p className="text-sm mb-8" style={{ color: 'var(--text-2)' }}>Sign in to your account</p>
+          <h1 className="text-2xl font-bold tracking-tight mb-1" style={{ color: 'var(--text-1)' }}>{t('auth.welcomeBack')}</h1>
+          <p className="text-sm mb-8" style={{ color: 'var(--text-2)' }}>{t('auth.signInSubtitle')}</p>
 
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Email</label>
+              <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{t('auth.email')}</label>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com" required className="w-full px-4 py-3 text-sm outline-none" style={inputBase}
                 onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
                 onBlur={(e) => (e.target.style.borderColor = 'var(--border-strong)')} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Password</label>
+              <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{t('auth.password')}</label>
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••" required className="w-full px-4 py-3 text-sm outline-none" style={inputBase}
                 onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
@@ -78,13 +80,13 @@ export default function LoginPage() {
             <button type="submit" disabled={loading}
               className="w-full py-3 rounded-xl text-sm font-semibold mt-1 cursor-pointer disabled:opacity-50 text-white"
               style={{ background: 'var(--accent)' }}>
-              {loading ? 'Signing in...' : 'Sign in'}
+              {loading ? t('auth.signingIn') : t('auth.signIn')}
             </button>
           </form>
 
           <p className="text-center text-sm mt-6" style={{ color: 'var(--text-2)' }}>
-            No account?{' '}
-            <Link href="/signup" className="font-semibold" style={{ color: 'var(--accent)' }}>Create one</Link>
+            {t('auth.noAccount')}{' '}
+            <Link href="/signup" className="font-semibold" style={{ color: 'var(--accent)' }}>{t('auth.createOne')}</Link>
           </p>
         </div>
       </div>

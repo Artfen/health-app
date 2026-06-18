@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Pulse } from '@phosphor-icons/react';
+import { useI18n } from '@/lib/i18n/I18nProvider';
 
 export default function SignupPage() {
+  const { t } = useI18n();
   const router = useRouter();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -54,15 +56,15 @@ export default function SignupPage() {
 
         <div className="rounded-2xl p-8" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
           <h1 className="text-2xl font-semibold tracking-tight mb-1" style={{ color: 'var(--text-primary)' }}>
-            Create account
+            {t('auth.createAccount')}
           </h1>
           <p className="text-sm mb-8" style={{ color: 'var(--text-secondary)' }}>
-            Start tracking and comparing your health
+            {t('auth.signUpSubtitle')}
           </p>
 
           <form onSubmit={handleSignup} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Name</label>
+              <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{t('auth.name')}</label>
               <input
                 type="text"
                 value={fullName}
@@ -77,7 +79,7 @@ export default function SignupPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Email</label>
+              <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{t('auth.email')}</label>
               <input
                 type="email"
                 value={email}
@@ -92,12 +94,12 @@ export default function SignupPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Password</label>
+              <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{t('auth.password')}</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min 8 characters"
+                placeholder={t('auth.passwordHint')}
                 minLength={8}
                 required
                 className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
@@ -121,15 +123,15 @@ export default function SignupPage() {
               onMouseEnter={(e) => !loading && ((e.target as HTMLElement).style.background = 'var(--accent-hover)')}
               onMouseLeave={(e) => ((e.target as HTMLElement).style.background = 'var(--accent)')}
             >
-              {loading ? 'Creating account...' : 'Create account'}
+              {loading ? t('auth.creatingAccount') : t('auth.createAccount')}
             </button>
           </form>
         </div>
 
         <p className="text-center text-sm mt-6" style={{ color: 'var(--text-secondary)' }}>
-          Already have an account?{' '}
+          {t('auth.haveAccount')}{' '}
           <Link href="/login" className="font-medium" style={{ color: 'var(--accent)' }}>
-            Sign in
+            {t('auth.signIn')}
           </Link>
         </p>
       </div>

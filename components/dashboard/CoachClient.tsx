@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { PaperPlaneTilt, Robot, User, Plus, Target, CheckCircle, Trash, CaretDown, ArrowCounterClockwise, Bandaids, CalendarCheck, X } from '@phosphor-icons/react';
+import { useI18n } from '@/lib/i18n/I18nProvider';
 
 type Injury = {
   id: string;
@@ -96,17 +97,17 @@ function MarkdownMessage({ content, isUser }: { content: string; isUser: boolean
   );
 }
 
-const PRESET_OBJECTIVES = [
-  { title: 'Hyrox', description: 'Complete a Hyrox race — 8km running + 8 functional fitness stations' },
-  { title: 'Marathon', description: 'Complete a 42.2km marathon' },
-  { title: 'Half Marathon', description: 'Complete a 21.1km half marathon' },
-  { title: 'Sub 20 min 5k', description: 'Run 5km in under 20 minutes' },
-  { title: 'Sub 45 min 10k', description: 'Run 10km in under 45 minutes' },
-  { title: 'Triathlon', description: 'Complete a triathlon (swim, bike, run)' },
-  { title: 'Improve HRV', description: 'Consistently improve heart rate variability through better recovery' },
-  { title: 'Lose weight', description: 'Reduce body weight through training and nutrition' },
-  { title: 'Build strength', description: 'Increase overall strength through progressive overload' },
-  { title: 'Ultra trail run', description: 'Complete an ultra trail running event (50km+)' },
+const PRESET_OBJECTIVE_KEYS = [
+  'hyrox',
+  'marathon',
+  'halfMarathon',
+  'sub20_5k',
+  'sub45_10k',
+  'triathlon',
+  'improveHrv',
+  'loseWeight',
+  'buildStrength',
+  'ultraTrail',
 ];
 
 function fmtSleep(seconds: number | null) {
@@ -120,6 +121,7 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
   snapshots: Snapshot[];
   objectives: Objective[];
 }) {
+  const { t, localeTag } = useI18n();
   const [objectives, setObjectives] = useState<Objective[]>(initialObjectives);
   const [messages, setMessages] = useState<Message[]>(() => {
     if (typeof window === 'undefined') return [];
@@ -240,7 +242,7 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
     } catch {
       setMessages(prev => {
         const updated = [...prev];
-        updated[updated.length - 1] = { role: 'assistant', content: 'Something went wrong. Try again.' };
+        updated[updated.length - 1] = { role: 'assistant', content: t('coach.genericError') };
         return updated;
       });
     }
@@ -288,11 +290,13 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
   }
 
   const quickPrompts = [
-    'Plan my training week',
-    'What should I train today?',
-    'How is my recovery today?',
-    'Am I overtraining?',
-    activeObjective ? `Build a plan for my ${activeObjective.title}` : 'What objective should I set?',
+    t('coach.quickPrompts.planWeek'),
+    t('coach.quickPrompts.trainToday'),
+    t('coach.quickPrompts.recovery'),
+    t('coach.quickPrompts.overtraining'),
+    activeObjective
+      ? t('coach.quickPrompts.buildPlan', { title: activeObjective.title })
+      : t('coach.quickPrompts.whatObjective'),
   ];
 
   return (
@@ -304,7 +308,7 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
 
         <div className="p-5 border-b" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Objectives</p>
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('coach.objectives')}</p>
             <button onClick={() => setShowObjectiveModal(true)}
               className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
               style={{ background: 'var(--accent)', color: '#fff' }}>
@@ -325,17 +329,17 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
               )}
               {activeObjective.target_date && (
                 <p className="text-xs mt-1 ml-5 font-medium" style={{ color: 'var(--accent)' }}>
-                  Target: {new Date(activeObjective.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {t('coach.target', { date: new Date(activeObjective.target_date).toLocaleDateString(localeTag, { month: 'short', day: 'numeric', year: 'numeric' }) })}
                 </p>
               )}
               <div className="flex gap-2 mt-2.5 ml-5">
                 <button onClick={() => completeObjective(activeObjective.id)}
                   className="text-xs flex items-center gap-1 cursor-pointer" style={{ color: '#22c55e' }}>
-                  <CheckCircle size={12} /> Done
+                  <CheckCircle size={12} /> {t('common.done')}
                 </button>
                 <button onClick={() => deleteObjective(activeObjective.id)}
                   className="text-xs flex items-center gap-1 cursor-pointer" style={{ color: 'var(--text-3)' }}>
-                  <Trash size={12} /> Remove
+                  <Trash size={12} /> {t('common.remove')}
                 </button>
               </div>
             </div>
@@ -343,7 +347,7 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
             <button onClick={() => setShowObjectiveModal(true)}
               className="w-full py-3 rounded-xl text-xs font-medium cursor-pointer border-dashed border-2 flex items-center justify-center gap-2"
               style={{ borderColor: 'var(--border-strong)', color: 'var(--text-3)' }}>
-              <Plus size={12} /> Set an objective
+              <Plus size={12} /> {t('coach.setObjective')}
             </button>
           )}
 
@@ -356,7 +360,7 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
                   <span className="text-xs" style={{ color: 'var(--text-3)' }}>{o.title}</span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full"
                     style={{ background: o.status === 'completed' ? 'rgba(34,197,94,0.12)' : 'var(--border)', color: o.status === 'completed' ? '#22c55e' : 'var(--text-3)' }}>
-                    {o.status}
+                    {t(o.status === 'completed' ? 'coach.status.completed' : 'coach.status.paused')}
                   </span>
                 </div>
               ))}
@@ -369,7 +373,7 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-1.5">
               <Bandaids size={14} style={{ color: 'var(--text-2)' }} />
-              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Injuries</p>
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('coach.injuries')}</p>
             </div>
             <button onClick={() => setShowInjuryForm((v) => !v)}
               className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
@@ -381,26 +385,26 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
           {showInjuryForm && (
             <div className="flex flex-col gap-2 mb-3">
               <input type="text" value={injuryPart} onChange={(e) => setInjuryPart(e.target.value)}
-                placeholder="e.g. left knee"
+                placeholder={t('coach.injuryPlaceholder')}
                 className="w-full px-3 py-2 rounded-lg text-xs outline-none"
                 style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }} />
               <div className="flex gap-2">
                 <select value={injurySeverity} onChange={(e) => setInjurySeverity(e.target.value)}
                   className="flex-1 px-3 py-2 rounded-lg text-xs outline-none cursor-pointer"
                   style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }}>
-                  <option value="mild">Mild</option>
-                  <option value="moderate">Moderate</option>
-                  <option value="severe">Severe</option>
+                  <option value="mild">{t('coach.severity.mild')}</option>
+                  <option value="moderate">{t('coach.severity.moderate')}</option>
+                  <option value="severe">{t('coach.severity.severe')}</option>
                 </select>
                 <button onClick={addInjury} disabled={!injuryPart.trim()}
                   className="px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-40"
-                  style={{ background: 'var(--accent)', color: '#fff' }}>Add</button>
+                  style={{ background: 'var(--accent)', color: '#fff' }}>{t('common.add')}</button>
               </div>
             </div>
           )}
 
           {injuries.length === 0 && !showInjuryForm ? (
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>None logged. Tell the coach if something hurts.</p>
+            <p className="text-xs" style={{ color: 'var(--text-3)' }}>{t('coach.injuryEmpty')}</p>
           ) : (
             <div className="flex flex-col gap-1.5">
               {injuries.map((inj) => (
@@ -409,12 +413,12 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
                   <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--red)' }} />
                   <span className="text-xs flex-1 capitalize truncate" style={{ color: 'var(--text-1)' }}>
                     {inj.body_part}
-                    <span className="ml-1" style={{ color: 'var(--text-3)' }}>· {inj.severity}</span>
+                    <span className="ml-1" style={{ color: 'var(--text-3)' }}>· {t(`coach.severity.${inj.severity}`)}</span>
                   </span>
-                  <button onClick={() => resolveInjury(inj.id)} title="Mark healed" className="cursor-pointer" style={{ color: 'var(--green)' }}>
+                  <button onClick={() => resolveInjury(inj.id)} title={t('coach.markHealed')} className="cursor-pointer" style={{ color: 'var(--green)' }}>
                     <CheckCircle size={14} />
                   </button>
-                  <button onClick={() => deleteInjury(inj.id)} title="Remove" className="cursor-pointer" style={{ color: 'var(--text-3)' }}>
+                  <button onClick={() => deleteInjury(inj.id)} title={t('common.remove')} className="cursor-pointer" style={{ color: 'var(--text-3)' }}>
                     <Trash size={12} />
                   </button>
                 </div>
@@ -426,17 +430,17 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
         {/* Today's metrics snapshot */}
         {today && (
           <div className="p-5">
-            <p className="text-xs font-semibold mb-3 uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Today</p>
+            <p className="text-xs font-semibold mb-3 uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>{t('common.today')}</p>
             <div className="flex flex-col gap-2.5">
               {[
-                { label: 'Steps', value: today.steps ? `${(today.steps as number).toLocaleString()}` : '--' },
-                { label: 'Sleep', value: fmtSleep(today.sleep_seconds as number | null) },
-                { label: 'HRV', value: today.hrv_last_night ? `${Math.round(today.hrv_last_night as number)} ms` : '--' },
-                { label: 'Body Battery', value: today.body_battery_high ? `${today.body_battery_high} / 100` : '--' },
-                { label: 'Stress', value: today.avg_stress ? `${today.avg_stress} / 100` : '--' },
-                { label: 'Resting HR', value: today.resting_hr ? `${today.resting_hr} bpm` : '--' },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex items-center justify-between">
+                { key: 'steps', label: t('metrics.steps'), value: today.steps ? `${(today.steps as number).toLocaleString(localeTag)}` : '--' },
+                { key: 'sleep', label: t('metrics.sleep'), value: fmtSleep(today.sleep_seconds as number | null) },
+                { key: 'hrv', label: t('metrics.hrv'), value: today.hrv_last_night ? `${Math.round(today.hrv_last_night as number)} ms` : '--' },
+                { key: 'bodyBattery', label: t('metrics.bodyBattery'), value: today.body_battery_high ? `${today.body_battery_high} / 100` : '--' },
+                { key: 'stress', label: t('coach.stress'), value: today.avg_stress ? `${today.avg_stress} / 100` : '--' },
+                { key: 'restingHr', label: t('metrics.restingHr'), value: today.resting_hr ? `${today.resting_hr} bpm` : '--' },
+              ].map(({ key, label, value }) => (
+                <div key={key} className="flex items-center justify-between">
                   <span className="text-xs" style={{ color: 'var(--text-3)' }}>{label}</span>
                   <span className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>{value}</span>
                 </div>
@@ -458,26 +462,26 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
               <Robot size={18} color="white" weight="fill" />
             </div>
             <div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Health Coach</p>
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('coach.healthCoach')}</p>
               <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                {activeObjective ? `Training for: ${activeObjective.title}` : 'Powered by your Garmin data'}
+                {activeObjective ? t('coach.trainingFor', { title: activeObjective.title }) : t('coach.poweredBy')}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {messages.length > 0 && (
-              <button onClick={clearChat} title="Clear chat"
+              <button onClick={clearChat} title={t('coach.clearChat')}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium cursor-pointer"
                 style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
                 <ArrowCounterClockwise size={13} />
-                <span className="hidden sm:inline">New chat</span>
+                <span className="hidden sm:inline">{t('coach.newChat')}</span>
               </button>
             )}
             <button onClick={() => setShowObjectiveModal(true)}
               className="lg:hidden flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium cursor-pointer"
               style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
               <Target size={13} />
-              {activeObjective ? activeObjective.title : 'Set goal'}
+              {activeObjective ? activeObjective.title : t('coach.setGoal')}
             </button>
           </div>
         </div>
@@ -488,8 +492,8 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
             className="mx-6 mt-3 flex items-center gap-2.5 px-4 py-2.5 rounded-xl cursor-pointer"
             style={{ background: 'color-mix(in srgb, var(--accent) 8%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 30%, var(--border))' }}>
             <CalendarCheck size={16} style={{ color: 'var(--accent)' }} weight="fill" />
-            <span className="text-xs font-medium flex-1" style={{ color: 'var(--text-1)' }}>Your coach updated the calendar</span>
-            <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>View →</span>
+            <span className="text-xs font-medium flex-1" style={{ color: 'var(--text-1)' }}>{t('coach.calendarUpdated')}</span>
+            <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>{t('coach.viewCalendar')}</span>
           </Link>
         )}
 
@@ -503,10 +507,10 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
               </div>
               <div>
                 <p className="text-lg font-semibold mb-1" style={{ color: 'var(--text-1)' }}>
-                  Your personal health coach
+                  {t('coach.emptyTitle')}
                 </p>
                 <p className="text-sm max-w-sm" style={{ color: 'var(--text-2)' }}>
-                  I have access to your full Garmin data. Ask me anything about your training, recovery, or performance.
+                  {t('coach.emptyBody')}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 justify-center max-w-lg">
@@ -581,7 +585,7 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
               }}
-              placeholder="Ask your coach anything..."
+              placeholder={t('coach.inputPlaceholder')}
               rows={1}
               className="flex-1 text-sm outline-none resize-none bg-transparent"
               style={{ color: 'var(--text-1)', maxHeight: 120 }}
@@ -593,7 +597,7 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
             </button>
           </div>
           <p className="text-[11px] text-center mt-2" style={{ color: 'var(--text-3)' }}>
-            Based on your last 30 days of Garmin data
+            {t('coach.basedOn')}
           </p>
         </div>
       </div>
@@ -604,21 +608,24 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
           style={{ background: 'rgba(0,0,0,0.4)' }}
           onClick={(e) => { if (e.target === e.currentTarget) setShowObjectiveModal(false); }}>
           <div className="w-full max-w-md rounded-2xl p-6" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-            <h3 className="text-base font-semibold mb-4" style={{ color: 'var(--text-1)' }}>Set an objective</h3>
+            <h3 className="text-base font-semibold mb-4" style={{ color: 'var(--text-1)' }}>{t('coach.setObjective')}</h3>
 
             {/* Presets */}
             <div className="mb-4">
               <button onClick={() => setShowPresets(!showPresets)}
                 className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm cursor-pointer"
                 style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-                Choose from presets
+                {t('coach.modal.choosePresets')}
                 <CaretDown size={14} className={showPresets ? 'rotate-180' : ''} style={{ transition: 'transform 0.2s' }} />
               </button>
               {showPresets && (
                 <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-                  {PRESET_OBJECTIVES.map((preset) => (
-                    <button key={preset.title}
-                      onClick={() => addObjective(preset.title, preset.description)}
+                  {PRESET_OBJECTIVE_KEYS.map((presetKey) => {
+                    const presetTitle = t(`coach.presets.${presetKey}.title`);
+                    const presetDesc = t(`coach.presets.${presetKey}.description`);
+                    return (
+                    <button key={presetKey}
+                      onClick={() => addObjective(presetTitle, presetDesc)}
                       disabled={addingObjective}
                       className="w-full flex items-start gap-3 px-4 py-3 text-left cursor-pointer transition-colors disabled:opacity-50"
                       style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-1)' }}
@@ -626,18 +633,19 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
                       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
                       <Target size={14} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 2 }} />
                       <div>
-                        <p className="text-sm font-medium">{preset.title}</p>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{preset.description}</p>
+                        <p className="text-sm font-medium">{presetTitle}</p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{presetDesc}</p>
                       </div>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
 
             <div className="flex items-center gap-3 mb-4">
               <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
-              <span className="text-xs" style={{ color: 'var(--text-3)' }}>or custom</span>
+              <span className="text-xs" style={{ color: 'var(--text-3)' }}>{t('coach.modal.orCustom')}</span>
               <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
             </div>
 
@@ -646,14 +654,14 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
                 type="text"
                 value={customTitle}
                 onChange={(e) => setCustomTitle(e.target.value)}
-                placeholder="Objective title (e.g. Ironman 70.3)"
+                placeholder={t('coach.modal.titlePlaceholder')}
                 className="w-full px-4 py-3 rounded-xl text-sm outline-none"
                 style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }}
               />
               <textarea
                 value={customDesc}
                 onChange={(e) => setCustomDesc(e.target.value)}
-                placeholder="Description (optional)"
+                placeholder={t('coach.modal.descPlaceholder')}
                 rows={2}
                 className="w-full px-4 py-3 rounded-xl text-sm outline-none resize-none"
                 style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }}
@@ -669,13 +677,13 @@ export default function CoachClient({ snapshots, objectives: initialObjectives }
                 <button onClick={() => setShowObjectiveModal(false)}
                   className="flex-1 py-3 rounded-xl text-sm cursor-pointer"
                   style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button onClick={() => addObjective(customTitle, customDesc, customDate)}
                   disabled={!customTitle.trim() || addingObjective}
                   className="flex-1 py-3 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-40"
                   style={{ background: 'var(--accent)', color: '#fff' }}>
-                  {addingObjective ? 'Saving...' : 'Set objective'}
+                  {addingObjective ? t('coach.saving') : t('coach.modal.setObjective')}
                 </button>
               </div>
             </div>

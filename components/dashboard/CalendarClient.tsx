@@ -3,8 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   CaretLeft, CaretRight, Plus, Trash, CheckCircle, X, Play, Check,
-  PersonSimpleRun, Barbell, Heart, PersonSimpleTaiChi, Bicycle, Bed, DotsThree, Sparkle, PencilSimple,
+  PersonSimpleRun, Barbell, Heart, PersonSimpleTaiChi, Bicycle, Bed, DotsThree, Sparkle, PencilSimple, Fire, Clock,
 } from '@phosphor-icons/react';
+import { useI18n } from '@/lib/i18n/I18nProvider';
+import type { TFunction } from '@/lib/i18n/translate';
+import { estimateCalories } from '@/lib/training/calories';
 
 type SetEntry = { weight: string; reps: string; done: boolean };
 type Exercise = { name: string; sets: SetEntry[] };
@@ -19,18 +22,46 @@ type Session = {
   status: string;
   created_by: string;
   exercises: Exercise[];
+  rpe: number | null;
+  distance_meters: number | null;
+  start_time: string | null;
+  feel: string | null;
+  calories: number | null;
+  calories_estimated: boolean;
 };
 
-const TYPE_META: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
-  run: { color: '#e8521c', icon: <PersonSimpleRun size={13} weight="bold" />, label: 'Run' },
-  strength: { color: '#6366f1', icon: <Barbell size={13} weight="bold" />, label: 'Strength' },
-  recovery: { color: '#16a34a', icon: <Heart size={13} weight="bold" />, label: 'Recovery' },
-  mobility: { color: '#0891b2', icon: <PersonSimpleTaiChi size={13} weight="bold" />, label: 'Mobility' },
-  cardio: { color: '#db2777', icon: <Bicycle size={13} weight="bold" />, label: 'Cardio' },
-  rest: { color: '#64748b', icon: <Bed size={13} weight="bold" />, label: 'Rest' },
-  other: { color: '#9899aa', icon: <DotsThree size={13} weight="bold" />, label: 'Other' },
+const TYPE_META: Record<string, { color: string; icon: React.ReactNode; labelKey: string }> = {
+  run: { color: '#e8521c', icon: <PersonSimpleRun size={13} weight="bold" />, labelKey: 'calendar.typeRun' },
+  strength: { color: '#6366f1', icon: <Barbell size={13} weight="bold" />, labelKey: 'calendar.typeStrength' },
+  recovery: { color: '#16a34a', icon: <Heart size={13} weight="bold" />, labelKey: 'calendar.typeRecovery' },
+  mobility: { color: '#0891b2', icon: <PersonSimpleTaiChi size={13} weight="bold" />, labelKey: 'calendar.typeMobility' },
+  cardio: { color: '#db2777', icon: <Bicycle size={13} weight="bold" />, labelKey: 'calendar.typeCardio' },
+  rest: { color: '#64748b', icon: <Bed size={13} weight="bold" />, labelKey: 'calendar.typeRest' },
+  other: { color: '#9899aa', icon: <DotsThree size={13} weight="bold" />, labelKey: 'calendar.typeOther' },
 };
 function typeMeta(t: string | null) { return TYPE_META[t ?? 'other'] ?? TYPE_META.other!; }
+function typeLabel(t: TFunction, type: string | null) { return t(typeMeta(type).labelKey); }
+
+const INTENSITIES = [
+  { value: 'easy', key: 'calendar.intensityEasy' },
+  { value: 'moderate', key: 'calendar.intensityModerate' },
+  { value: 'hard', key: 'calendar.intensityHard' },
+];
+function intensityLabel(t: TFunction, v: string | null) {
+  const m = INTENSITIES.find((i) => i.value === v);
+  return m ? t(m.key) : v ?? '';
+}
+
+const FEELS = [
+  { value: 'great', key: 'calendar.feelGreat' },
+  { value: 'good', key: 'calendar.feelGood' },
+  { value: 'ok', key: 'calendar.feelOk' },
+  { value: 'tired', key: 'calendar.feelTired' },
+  { value: 'rough', key: 'calendar.feelRough' },
+];
+
+// Cardio-type workouts where a distance field is meaningful.
+const DISTANCE_TYPES = new Set(['run', 'cardio']);
 
 function iso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -43,11 +74,21 @@ function startOfWeek(d: Date) {
 }
 function normalize(raw: Record<string, unknown>): Session {
   const ex = Array.isArray(raw.exercises) ? (raw.exercises as Exercise[]) : [];
-  return { ...(raw as unknown as Session), exercises: ex };
+  return {
+    ...(raw as unknown as Session),
+    exercises: ex,
+    rpe: (raw.rpe as number) ?? null,
+    distance_meters: (raw.distance_meters as number) ?? null,
+    start_time: (raw.start_time as string) ?? null,
+    feel: (raw.feel as string) ?? null,
+    calories: (raw.calories as number) ?? null,
+    calories_estimated: Boolean(raw.calories_estimated),
+  };
 }
 const todayISO = iso(new Date());
 
-export default function CalendarClient() {
+export default function CalendarClient({ weightKg }: { weightKg: number | null }) {
+  const { t, localeTag } = useI18n();
   const [view, setView] = useState<'month' | 'week'>('month');
   const [cursor, setCursor] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -58,7 +99,6 @@ export default function CalendarClient() {
   const [editor, setEditor] = useState<{ session: Session | null; date: string } | null>(null);
   const [workout, setWorkout] = useState<Session | null>(null);
 
-  // Visible date range
   const gridStart = (() => {
     if (view === 'week') return startOfWeek(cursor);
     const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
@@ -88,8 +128,14 @@ export default function CalendarClient() {
   const byDay = (key: string) => sessions.filter((s) => s.date === key);
 
   const title = view === 'week'
-    ? `${gridStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${rangeEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-    : cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    ? `${gridStart.toLocaleDateString(localeTag, { month: 'short', day: 'numeric' })} – ${rangeEnd.toLocaleDateString(localeTag, { month: 'short', day: 'numeric' })}`
+    : cursor.toLocaleDateString(localeTag, { month: 'long', year: 'numeric' });
+
+  // Localized Monday-first weekday initials for the month header.
+  const weekdayLabels = Array.from({ length: 7 }, (_, i) => {
+    const d = startOfWeek(new Date(2024, 0, 1)); d.setDate(d.getDate() + i);
+    return d.toLocaleDateString(localeTag, { weekday: 'short' });
+  });
 
   async function afterMutate() { await load(); }
 
@@ -98,27 +144,27 @@ export default function CalendarClient() {
       {/* Header */}
       <div className="flex items-start justify-between mb-5 gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>Training calendar</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>Plan your month. Tap a day to see and log workouts.</p>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>{t('calendar.title')}</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{t('calendar.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
             {(['month', 'week'] as const).map((v) => (
               <button key={v} onClick={() => setView(v)}
-                className="px-3 py-2 text-xs font-semibold cursor-pointer capitalize"
+                className="px-3 py-2 text-xs font-semibold cursor-pointer"
                 style={v === view ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface)', color: 'var(--text-2)' }}>
-                {v}
+                {t(`calendar.${v}`)}
               </button>
             ))}
           </div>
           <div className="flex items-center rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
             <button onClick={() => shift(-1)} className="px-2.5 py-2 cursor-pointer hover:opacity-70" style={{ color: 'var(--text-2)' }}><CaretLeft size={15} weight="bold" /></button>
-            <button onClick={() => { const d = new Date(); d.setHours(0,0,0,0); setCursor(d); }} className="px-3 py-2 text-xs font-semibold cursor-pointer" style={{ color: 'var(--text-2)', borderLeft: '1px solid var(--border)', borderRight: '1px solid var(--border)' }}>Today</button>
+            <button onClick={() => { const d = new Date(); d.setHours(0,0,0,0); setCursor(d); }} className="px-3 py-2 text-xs font-semibold cursor-pointer" style={{ color: 'var(--text-2)', borderLeft: '1px solid var(--border)', borderRight: '1px solid var(--border)' }}>{t('common.today')}</button>
             <button onClick={() => shift(1)} className="px-2.5 py-2 cursor-pointer hover:opacity-70" style={{ color: 'var(--text-2)' }}><CaretRight size={15} weight="bold" /></button>
           </div>
           <button onClick={() => setEditor({ session: null, date: todayISO >= iso(gridStart) && todayISO <= iso(rangeEnd) ? todayISO : iso(gridStart) })}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer" style={{ background: 'var(--accent)', color: '#fff', boxShadow: 'var(--shadow-sm)' }}>
-            <Plus size={15} weight="bold" /> <span className="hidden sm:inline">Add</span>
+            <Plus size={15} weight="bold" /> <span className="hidden sm:inline">{t('calendar.add')}</span>
           </button>
         </div>
       </div>
@@ -128,8 +174,8 @@ export default function CalendarClient() {
       {/* Weekday header (month) */}
       {view === 'month' && (
         <div className="grid grid-cols-7 gap-1.5 mb-1.5">
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
-            <div key={d} className="text-center text-[11px] font-semibold uppercase tracking-wide py-1" style={{ color: 'var(--text-3)' }}>{d}</div>
+          {weekdayLabels.map((d, i) => (
+            <div key={i} className="text-center text-[11px] font-semibold uppercase tracking-wide py-1" style={{ color: 'var(--text-3)' }}>{d}</div>
           ))}
         </div>
       )}
@@ -162,18 +208,17 @@ export default function CalendarClient() {
                       </div>
                     );
                   })}
-                  {dayS.length > 2 && <span className="text-[10px] px-1" style={{ color: 'var(--text-3)' }}>+{dayS.length - 2} more</span>}
+                  {dayS.length > 2 && <span className="text-[10px] px-1" style={{ color: 'var(--text-3)' }}>{t('calendar.moreCount', { count: dayS.length - 2 })}</span>}
                 </div>
               </button>
             );
           }
-          // week view cell
           return (
             <div key={key} className="rounded-2xl p-3 flex flex-col min-h-[150px]"
               style={{ background: isToday ? 'color-mix(in srgb, var(--accent) 5%, var(--surface))' : 'var(--surface)', border: isToday ? '1px solid color-mix(in srgb, var(--accent) 35%, var(--border))' : '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: isToday ? 'var(--accent)' : 'var(--text-3)' }}>{d.toLocaleDateString('en-US', { weekday: 'short' })}</span>
+                  <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: isToday ? 'var(--accent)' : 'var(--text-3)' }}>{d.toLocaleDateString(localeTag, { weekday: 'short' })}</span>
                   <span className="text-sm font-bold" style={{ color: isToday ? 'var(--accent)' : 'var(--text-1)' }}>{d.getDate()}</span>
                 </div>
                 <button onClick={() => setEditor({ session: null, date: key })} className="w-6 h-6 rounded-lg flex items-center justify-center cursor-pointer" style={{ color: 'var(--text-3)', background: 'var(--surface-2)' }}><Plus size={12} weight="bold" /></button>
@@ -182,7 +227,7 @@ export default function CalendarClient() {
                 {dayS.map((s) => <SessionChip key={s.id} s={s} onClick={() => setDetail(s)} />)}
                 {!loading && dayS.length === 0 && (
                   <button onClick={() => setEditor({ session: null, date: key })} className="flex-1 min-h-[40px] rounded-xl cursor-pointer flex items-center justify-center" style={{ border: '1px dashed var(--border-strong)' }}>
-                    <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Rest / add</span>
+                    <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t('calendar.restOrAdd')}</span>
                   </button>
                 )}
               </div>
@@ -196,8 +241,8 @@ export default function CalendarClient() {
         <div className="mt-5 rounded-2xl p-5 flex items-center gap-3" style={{ background: 'color-mix(in srgb, var(--accent) 6%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 25%, var(--border))' }}>
           <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent)' }}><Sparkle size={18} weight="fill" color="#fff" /></div>
           <div>
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Let your coach plan the month</p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>Ask the AI Coach to build your training. It reads your recovery and goals and fills this in.</p>
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('calendar.coachNudgeTitle')}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>{t('calendar.coachNudgeBody')}</p>
           </div>
         </div>
       )}
@@ -207,17 +252,17 @@ export default function CalendarClient() {
         <Modal onClose={() => setDayPanel(null)}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>
-              {new Date(dayPanel + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              {new Date(dayPanel + 'T00:00:00').toLocaleDateString(localeTag, { weekday: 'long', month: 'long', day: 'numeric' })}
             </h3>
             <button onClick={() => setDayPanel(null)} className="cursor-pointer" style={{ color: 'var(--text-3)' }}><X size={18} /></button>
           </div>
           <div className="flex flex-col gap-2 mb-4">
-            {byDay(dayPanel).length === 0 && <p className="text-sm" style={{ color: 'var(--text-3)' }}>Nothing planned. Add a workout below.</p>}
+            {byDay(dayPanel).length === 0 && <p className="text-sm" style={{ color: 'var(--text-3)' }}>{t('calendar.nothingPlanned')}</p>}
             {byDay(dayPanel).map((s) => <SessionChip key={s.id} s={s} expanded onClick={() => { setDayPanel(null); setDetail(s); }} />)}
           </div>
           <button onClick={() => { const d = dayPanel; setDayPanel(null); setEditor({ session: null, date: d }); }}
             className="w-full py-2.5 rounded-xl text-sm font-semibold cursor-pointer" style={{ background: 'var(--accent)', color: '#fff' }}>
-            <Plus size={14} className="inline mr-1" /> Add workout
+            <Plus size={14} className="inline mr-1" /> {t('calendar.addWorkout')}
           </button>
         </Modal>
       )}
@@ -243,7 +288,7 @@ export default function CalendarClient() {
       {/* Editor */}
       {editor && (
         <Modal onClose={() => setEditor(null)}>
-          <SessionEditor editor={editor} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); afterMutate(); }} />
+          <SessionEditor editor={editor} weightKg={weightKg} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); afterMutate(); }} />
         </Modal>
       )}
 
@@ -256,9 +301,10 @@ export default function CalendarClient() {
 }
 
 function SessionChip({ s, onClick, expanded }: { s: Session; onClick: () => void; expanded?: boolean }) {
+  const { t } = useI18n();
   const m = typeMeta(s.type);
   const completed = s.status === 'completed';
-  const bits = [s.type, s.duration_min ? `${s.duration_min} min` : null, s.intensity].filter(Boolean).join(' · ');
+  const bits = [typeLabel(t, s.type), s.duration_min ? `${s.duration_min} min` : null, intensityLabel(t, s.intensity)].filter(Boolean).join(' · ');
   return (
     <button onClick={onClick} className="text-left rounded-xl p-2.5 cursor-pointer transition-all hover:opacity-90 w-full"
       style={{ background: `color-mix(in srgb, ${m.color} ${completed ? 6 : 11}%, var(--surface))`, border: `1px solid color-mix(in srgb, ${m.color} ${completed ? 18 : 32}%, transparent)`, opacity: s.status === 'skipped' ? 0.5 : 1 }}>
@@ -268,8 +314,8 @@ function SessionChip({ s, onClick, expanded }: { s: Session; onClick: () => void
         {completed && <CheckCircle size={13} weight="fill" style={{ color: m.color }} />}
         {s.created_by === 'coach' && <Sparkle size={10} weight="fill" style={{ color: 'var(--accent)' }} />}
       </div>
-      {(expanded || bits) && bits && <p className="text-[10px] mt-0.5 capitalize" style={{ color: 'var(--text-3)' }}>{bits}</p>}
-      {expanded && s.exercises.length > 0 && <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{s.exercises.length} exercise{s.exercises.length !== 1 ? 's' : ''}</p>}
+      {bits && <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{bits}</p>}
+      {expanded && s.exercises.length > 0 && <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{t('calendar.exercisesCount', { count: s.exercises.length })}</p>}
     </button>
   );
 }
@@ -277,7 +323,17 @@ function SessionChip({ s, onClick, expanded }: { s: Session; onClick: () => void
 function SessionDetail({ s, onClose, onEdit, onStart, onDelete, onToggleComplete }: {
   s: Session; onClose: () => void; onEdit: () => void; onStart: () => void; onDelete: () => void; onToggleComplete: () => void;
 }) {
+  const { t } = useI18n();
   const m = typeMeta(s.type);
+  const meta = [typeLabel(t, s.type), s.duration_min ? `${s.duration_min} min` : null, intensityLabel(t, s.intensity)].filter(Boolean).join(' · ');
+  const distanceKm = s.distance_meters != null ? (s.distance_meters / 1000) : null;
+  const stats = [
+    s.calories != null ? { icon: <Fire size={13} weight="fill" />, text: `${s.calories} kcal${s.calories_estimated ? ' ≈' : ''}` } : null,
+    distanceKm != null ? { icon: <PersonSimpleRun size={13} weight="bold" />, text: `${distanceKm} km` } : null,
+    s.rpe != null ? { icon: null, text: `RPE ${s.rpe}` } : null,
+    s.start_time ? { icon: <Clock size={13} weight="bold" />, text: s.start_time.slice(0, 5) } : null,
+    s.feel ? { icon: null, text: t(`calendar.feel${s.feel.charAt(0).toUpperCase() + s.feel.slice(1)}`) } : null,
+  ].filter(Boolean) as { icon: React.ReactNode; text: string }[];
   return (
     <>
       <div className="flex items-start justify-between mb-1">
@@ -285,26 +341,34 @@ function SessionDetail({ s, onClose, onEdit, onStart, onDelete, onToggleComplete
           <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${m.color} 15%, transparent)`, color: m.color }}>{m.icon}</div>
           <div>
             <h3 className="text-base font-semibold leading-tight" style={{ color: 'var(--text-1)' }}>{s.title}</h3>
-            <p className="text-xs capitalize" style={{ color: 'var(--text-3)' }}>
-              {[m.label, s.duration_min ? `${s.duration_min} min` : null, s.intensity].filter(Boolean).join(' · ')}
-            </p>
+            <p className="text-xs" style={{ color: 'var(--text-3)' }}>{meta}</p>
           </div>
         </div>
         <button onClick={onClose} className="cursor-pointer" style={{ color: 'var(--text-3)' }}><X size={18} /></button>
       </div>
 
+      {stats.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-3">
+          {stats.map((st, i) => (
+            <span key={i} className="text-xs px-2 py-1 rounded-lg flex items-center gap-1" style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}>
+              {st.icon}{st.text}
+            </span>
+          ))}
+        </div>
+      )}
+
       {s.description && <p className="text-sm mt-3 leading-relaxed" style={{ color: 'var(--text-2)' }}>{s.description}</p>}
 
       {s.exercises.length > 0 && (
         <div className="mt-4 flex flex-col gap-2">
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Routine</p>
+          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>{t('calendar.routine')}</p>
           {s.exercises.map((ex, i) => (
             <div key={i} className="rounded-xl p-3" style={{ background: 'var(--surface-2)' }}>
               <p className="text-sm font-semibold mb-1" style={{ color: 'var(--text-1)' }}>{ex.name}</p>
               <div className="flex flex-wrap gap-1.5">
                 {ex.sets.map((set, j) => (
                   <span key={j} className="text-xs px-2 py-0.5 rounded-md" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-                    {set.weight ? `${set.weight}kg` : ''}{set.weight && set.reps ? ' × ' : ''}{set.reps ? `${set.reps}` : ''}{!set.weight && !set.reps ? `Set ${j + 1}` : ''}
+                    {set.weight ? `${set.weight}kg` : ''}{set.weight && set.reps ? ' × ' : ''}{set.reps ? `${set.reps}` : ''}{!set.weight && !set.reps ? `${t('calendar.setN', { n: j + 1 })}` : ''}
                     {set.done && <Check size={10} className="inline ml-1" style={{ color: 'var(--green)' }} />}
                   </span>
                 ))}
@@ -316,9 +380,9 @@ function SessionDetail({ s, onClose, onEdit, onStart, onDelete, onToggleComplete
 
       <div className="flex gap-2 mt-5">
         <button onClick={onDelete} className="px-3 py-2.5 rounded-xl cursor-pointer" style={{ background: 'var(--red-bg)', color: 'var(--red)' }}><Trash size={14} /></button>
-        <button onClick={onEdit} className="px-3 py-2.5 rounded-xl cursor-pointer flex items-center gap-1.5 text-sm font-medium" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}><PencilSimple size={14} /> Edit</button>
-        <button onClick={onToggleComplete} className="px-3 py-2.5 rounded-xl cursor-pointer flex items-center gap-1.5 text-sm font-medium" style={{ background: 'var(--green-bg)', color: 'var(--green)' }}><CheckCircle size={14} /> {s.status === 'completed' ? 'Undo' : 'Done'}</button>
-        <button onClick={onStart} className="flex-1 py-2.5 rounded-xl cursor-pointer flex items-center justify-center gap-1.5 text-sm font-semibold" style={{ background: 'var(--accent)', color: '#fff' }}><Play size={14} weight="fill" /> Start workout</button>
+        <button onClick={onEdit} className="px-3 py-2.5 rounded-xl cursor-pointer flex items-center gap-1.5 text-sm font-medium" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}><PencilSimple size={14} /> {t('common.edit')}</button>
+        <button onClick={onToggleComplete} className="px-3 py-2.5 rounded-xl cursor-pointer flex items-center gap-1.5 text-sm font-medium" style={{ background: 'var(--green-bg)', color: 'var(--green)' }}><CheckCircle size={14} /> {s.status === 'completed' ? t('common.undo') : t('common.done')}</button>
+        <button onClick={onStart} className="flex-1 py-2.5 rounded-xl cursor-pointer flex items-center justify-center gap-1.5 text-sm font-semibold" style={{ background: 'var(--accent)', color: '#fff' }}><Play size={14} weight="fill" /> {t('calendar.startWorkout')}</button>
       </div>
     </>
   );
@@ -326,7 +390,8 @@ function SessionDetail({ s, onClose, onEdit, onStart, onDelete, onToggleComplete
 
 const inputStyle = { background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' };
 
-function SessionEditor({ editor, onClose, onSaved }: { editor: { session: Session | null; date: string }; onClose: () => void; onSaved: () => void }) {
+function SessionEditor({ editor, weightKg, onClose, onSaved }: { editor: { session: Session | null; date: string }; weightKg: number | null; onClose: () => void; onSaved: () => void }) {
+  const { t } = useI18n();
   const s = editor.session;
   const [title, setTitle] = useState(s?.title ?? '');
   const [date, setDate] = useState(s?.date ?? editor.date);
@@ -335,7 +400,16 @@ function SessionEditor({ editor, onClose, onSaved }: { editor: { session: Sessio
   const [intensity, setIntensity] = useState(s?.intensity ?? 'moderate');
   const [description, setDescription] = useState(s?.description ?? '');
   const [exercises, setExercises] = useState<Exercise[]>(s?.exercises ?? []);
+  const [startTime, setStartTime] = useState(s?.start_time?.slice(0, 5) ?? '');
+  const [distance, setDistance] = useState(s?.distance_meters != null ? String(s.distance_meters / 1000) : '');
+  const [rpe, setRpe] = useState<string>(s?.rpe != null ? String(s.rpe) : '');
+  const [feel, setFeel] = useState(s?.feel ?? '');
+  // Only prefill the calories field when the user had entered it manually.
+  const [calories, setCalories] = useState(s && !s.calories_estimated && s.calories != null ? String(s.calories) : '');
   const [saving, setSaving] = useState(false);
+
+  const estimate = estimateCalories({ type, intensity, durationMin: duration ? Number(duration) : null, weightKg });
+  const showDistance = DISTANCE_TYPES.has(type);
 
   function addExercise() { setExercises((p) => [...p, { name: '', sets: [{ weight: '', reps: '', done: false }] }]); }
   function setExName(i: number, name: string) { setExercises((p) => p.map((e, idx) => idx === i ? { ...e, name } : e)); }
@@ -352,6 +426,11 @@ function SessionEditor({ editor, onClose, onSaved }: { editor: { session: Sessio
     const payload = {
       date, title: title.trim(), type, intensity, description: description || null,
       duration_min: duration ? Number(duration) : null,
+      start_time: startTime || null,
+      distance_km: showDistance && distance ? Number(distance) : null,
+      rpe: rpe ? Number(rpe) : null,
+      feel: feel || null,
+      calories: calories === '' ? null : Number(calories),
       exercises: exercises.filter((e) => e.name.trim()),
     };
     if (s) await fetch('/api/training', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id, ...payload }) });
@@ -363,52 +442,99 @@ function SessionEditor({ editor, onClose, onSaved }: { editor: { session: Sessio
   return (
     <>
       <div className="flex items-center justify-between mb-5">
-        <h3 className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>{s ? 'Edit session' : 'New session'}</h3>
+        <h3 className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>{s ? t('calendar.editSession') : t('calendar.newSession')}</h3>
         <button onClick={onClose} className="cursor-pointer" style={{ color: 'var(--text-3)' }}><X size={18} /></button>
       </div>
 
       <div className="flex flex-col gap-3.5">
-        <Field label="Title"><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Push day, Tempo run" className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none" style={inputStyle} autoFocus /></Field>
+        <Field label={t('calendar.fieldTitle')}><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('calendar.titlePlaceholder')} className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none" style={inputStyle} autoFocus /></Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Date"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none" style={inputStyle} /></Field>
-          <Field label="Type"><select value={type} onChange={(e) => setType(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none cursor-pointer" style={inputStyle}>{Object.entries(TYPE_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></Field>
+          <Field label={t('calendar.fieldDate')}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none" style={inputStyle} /></Field>
+          <Field label={t('calendar.fieldTime')}><input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none" style={inputStyle} /></Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Duration (min)"><input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="45" className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none" style={inputStyle} /></Field>
-          <Field label="Intensity"><select value={intensity} onChange={(e) => setIntensity(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none cursor-pointer" style={inputStyle}><option value="easy">Easy</option><option value="moderate">Moderate</option><option value="hard">Hard</option></select></Field>
+          <Field label={t('calendar.fieldType')}><select value={type} onChange={(e) => setType(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none cursor-pointer" style={inputStyle}>{Object.entries(TYPE_META).map(([k, v]) => <option key={k} value={k}>{t(v.labelKey)}</option>)}</select></Field>
+          <Field label={t('calendar.fieldIntensity')}><select value={intensity} onChange={(e) => setIntensity(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none cursor-pointer" style={inputStyle}>{INTENSITIES.map((i) => <option key={i.value} value={i.value}>{t(i.key)}</option>)}</select></Field>
         </div>
-        <Field label="Notes"><textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Warm-up, targets, pace..." rows={2} className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none resize-none" style={inputStyle} /></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t('calendar.fieldDuration')}><input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder={t('calendar.durationPlaceholder')} className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none" style={inputStyle} /></Field>
+          {showDistance && (
+            <Field label={t('calendar.fieldDistance')}><input type="number" inputMode="decimal" value={distance} onChange={(e) => setDistance(e.target.value)} placeholder={t('calendar.distancePlaceholder')} className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none" style={inputStyle} /></Field>
+          )}
+        </div>
+
+        {/* Perceived effort */}
+        <Field label={t('calendar.fieldRpe')}>
+          <div className="flex items-center gap-3">
+            <input type="range" min={1} max={10} step={1} value={rpe || 5} onChange={(e) => setRpe(e.target.value)} className="flex-1 cursor-pointer accent-[var(--accent)]" />
+            <span className="text-sm font-bold w-10 text-center" style={{ color: rpe ? 'var(--accent)' : 'var(--text-3)' }}>{rpe || '–'}</span>
+          </div>
+          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t('calendar.rpeHint')}</p>
+        </Field>
+
+        {/* How did you feel */}
+        <Field label={t('calendar.fieldFeel')}>
+          <div className="flex flex-wrap gap-1.5">
+            {FEELS.map((f) => {
+              const active = feel === f.value;
+              return (
+                <button key={f.value} type="button" onClick={() => setFeel(active ? '' : f.value)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer"
+                  style={active ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
+                  {t(f.key)}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+
+        {/* Calories — optional, auto-estimated */}
+        <Field label={t('calendar.fieldCalories')}>
+          <input type="number" inputMode="numeric" value={calories} onChange={(e) => setCalories(e.target.value)}
+            placeholder={estimate != null ? String(estimate) : ''}
+            className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none" style={inputStyle} />
+          {weightKg == null ? (
+            <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t('calendar.caloriesNeedWeight')}</p>
+          ) : estimate != null ? (
+            <p className="text-[11px] flex items-center gap-1" style={{ color: 'var(--text-3)' }}>
+              <Fire size={11} weight="fill" style={{ color: 'var(--accent)' }} />
+              {t('calendar.caloriesEstimate', { value: estimate })} · {t('calendar.caloriesEstimateHint')}
+            </p>
+          ) : null}
+        </Field>
+
+        <Field label={t('calendar.fieldNotes')}><textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t('calendar.notesPlaceholder')} rows={2} className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none resize-none" style={inputStyle} /></Field>
 
         {/* Exercises */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Exercises (optional)</label>
-            <button onClick={addExercise} className="text-xs font-semibold flex items-center gap-1 cursor-pointer" style={{ color: 'var(--accent)' }}><Plus size={12} weight="bold" /> Add</button>
+            <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{t('calendar.exercisesOptional')}</label>
+            <button onClick={addExercise} className="text-xs font-semibold flex items-center gap-1 cursor-pointer" style={{ color: 'var(--accent)' }}><Plus size={12} weight="bold" /> {t('common.add')}</button>
           </div>
           {exercises.map((ex, i) => (
             <div key={i} className="rounded-xl p-3" style={{ background: 'var(--surface-2)' }}>
               <div className="flex items-center gap-2 mb-2">
-                <input value={ex.name} onChange={(e) => setExName(i, e.target.value)} placeholder="Exercise name" className="flex-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+                <input value={ex.name} onChange={(e) => setExName(i, e.target.value)} placeholder={t('calendar.exerciseNamePlaceholder')} className="flex-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
                 <button onClick={() => removeExercise(i)} className="cursor-pointer" style={{ color: 'var(--text-3)' }}><Trash size={14} /></button>
               </div>
               <div className="flex flex-col gap-1.5">
                 {ex.sets.map((st, j) => (
                   <div key={j} className="flex items-center gap-2">
-                    <span className="text-xs w-8" style={{ color: 'var(--text-3)' }}>Set {j + 1}</span>
-                    <input type="number" value={st.weight} onChange={(e) => setSetVal(i, j, 'weight', e.target.value)} placeholder="kg" className="flex-1 px-2.5 py-1.5 rounded-lg text-sm outline-none" style={inputStyle} />
+                    <span className="text-xs w-8" style={{ color: 'var(--text-3)' }}>{t('calendar.setN', { n: j + 1 })}</span>
+                    <input type="number" value={st.weight} onChange={(e) => setSetVal(i, j, 'weight', e.target.value)} placeholder={t('calendar.kg')} className="flex-1 px-2.5 py-1.5 rounded-lg text-sm outline-none" style={inputStyle} />
                     <span className="text-xs" style={{ color: 'var(--text-3)' }}>×</span>
-                    <input type="number" value={st.reps} onChange={(e) => setSetVal(i, j, 'reps', e.target.value)} placeholder="reps" className="flex-1 px-2.5 py-1.5 rounded-lg text-sm outline-none" style={inputStyle} />
+                    <input type="number" value={st.reps} onChange={(e) => setSetVal(i, j, 'reps', e.target.value)} placeholder={t('calendar.reps')} className="flex-1 px-2.5 py-1.5 rounded-lg text-sm outline-none" style={inputStyle} />
                     <button onClick={() => removeSet(i, j)} className="cursor-pointer" style={{ color: 'var(--text-3)' }}><X size={13} /></button>
                   </div>
                 ))}
-                <button onClick={() => addSet(i)} className="text-xs font-medium self-start cursor-pointer mt-0.5" style={{ color: 'var(--accent)' }}>+ Add set</button>
+                <button onClick={() => addSet(i)} className="text-xs font-medium self-start cursor-pointer mt-0.5" style={{ color: 'var(--accent)' }}>{t('calendar.addSet')}</button>
               </div>
             </div>
           ))}
         </div>
 
         <button onClick={save} disabled={saving || !title.trim()} className="w-full py-3 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-40 mt-1" style={{ background: 'var(--accent)', color: '#fff' }}>
-          {saving ? 'Saving...' : s ? 'Save changes' : 'Add to calendar'}
+          {saving ? t('common.saving') : s ? t('calendar.saveChanges') : t('calendar.addToCalendar')}
         </button>
       </div>
     </>
@@ -417,9 +543,12 @@ function SessionEditor({ editor, onClose, onSaved }: { editor: { session: Sessio
 
 // Hevy-style live logging — full screen
 function WorkoutLogger({ session, onClose, onFinished }: { session: Session; onClose: () => void; onFinished: () => void }) {
+  const { t } = useI18n();
   const [exercises, setExercises] = useState<Exercise[]>(
     session.exercises.length ? session.exercises.map((e) => ({ ...e, sets: e.sets.map((s) => ({ ...s })) })) : [{ name: session.title, sets: [{ weight: '', reps: '', done: false }] }],
   );
+  const [rpe, setRpe] = useState<string>(session.rpe != null ? String(session.rpe) : '');
+  const [feel, setFeel] = useState(session.feel ?? '');
   const [saving, setSaving] = useState(false);
 
   function toggle(i: number, j: number) { setExercises((p) => p.map((e, idx) => idx === i ? { ...e, sets: e.sets.map((st, sj) => sj === j ? { ...st, done: !st.done } : st) } : e)); }
@@ -439,13 +568,13 @@ function WorkoutLogger({ session, onClose, onFinished }: { session: Session; onC
 
   async function finish() {
     setSaving(true);
-    await fetch('/api/training', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: session.id, exercises: exercises.filter((e) => e.name.trim()), status: 'completed' }) });
+    await fetch('/api/training', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: session.id, exercises: exercises.filter((e) => e.name.trim()), status: 'completed', rpe: rpe ? Number(rpe) : null, feel: feel || null }) });
     setSaving(false);
     onFinished();
   }
   async function saveProgress() {
     setSaving(true);
-    await fetch('/api/training', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: session.id, exercises: exercises.filter((e) => e.name.trim()) }) });
+    await fetch('/api/training', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: session.id, exercises: exercises.filter((e) => e.name.trim()), rpe: rpe ? Number(rpe) : null, feel: feel || null }) });
     setSaving(false);
     onClose();
   }
@@ -454,12 +583,12 @@ function WorkoutLogger({ session, onClose, onFinished }: { session: Session; onC
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--bg)' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 flex-shrink-0" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
-        <button onClick={saveProgress} className="text-sm font-medium cursor-pointer" style={{ color: 'var(--text-3)' }}>Save & close</button>
+        <button onClick={saveProgress} className="text-sm font-medium cursor-pointer" style={{ color: 'var(--text-3)' }}>{t('calendar.saveAndClose')}</button>
         <div className="text-center">
           <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{session.title}</p>
-          <p className="text-xs" style={{ color: 'var(--text-3)' }}>{doneSets}/{totalSets} sets done</p>
+          <p className="text-xs" style={{ color: 'var(--text-3)' }}>{t('calendar.setsDone', { done: doneSets, total: totalSets })}</p>
         </div>
-        <button onClick={finish} disabled={saving} className="text-sm font-bold cursor-pointer disabled:opacity-50" style={{ color: 'var(--accent)' }}>Finish</button>
+        <button onClick={finish} disabled={saving} className="text-sm font-bold cursor-pointer disabled:opacity-50" style={{ color: 'var(--accent)' }}>{t('calendar.finish')}</button>
       </div>
 
       {/* Progress bar */}
@@ -472,12 +601,12 @@ function WorkoutLogger({ session, onClose, onFinished }: { session: Session; onC
         <div className="flex flex-col gap-4">
           {exercises.map((ex, i) => (
             <div key={i} className="rounded-2xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
-              <input value={ex.name} onChange={(e) => setName(i, e.target.value)} placeholder="Exercise name"
+              <input value={ex.name} onChange={(e) => setName(i, e.target.value)} placeholder={t('calendar.exerciseNamePlaceholder')}
                 className="text-base font-semibold mb-3 w-full outline-none bg-transparent" style={{ color: 'var(--text-1)' }} />
               <div className="grid grid-cols-[28px_1fr_1fr_40px] gap-2 items-center mb-1.5 px-1">
-                <span className="text-[10px] font-semibold uppercase" style={{ color: 'var(--text-3)' }}>Set</span>
-                <span className="text-[10px] font-semibold uppercase" style={{ color: 'var(--text-3)' }}>kg</span>
-                <span className="text-[10px] font-semibold uppercase" style={{ color: 'var(--text-3)' }}>Reps</span>
+                <span className="text-[10px] font-semibold uppercase" style={{ color: 'var(--text-3)' }}>{t('calendar.setHeader')}</span>
+                <span className="text-[10px] font-semibold uppercase" style={{ color: 'var(--text-3)' }}>{t('calendar.kg')}</span>
+                <span className="text-[10px] font-semibold uppercase" style={{ color: 'var(--text-3)' }}>{t('calendar.repsHeader')}</span>
                 <span />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -494,10 +623,36 @@ function WorkoutLogger({ session, onClose, onFinished }: { session: Session; onC
                   </div>
                 ))}
               </div>
-              <button onClick={() => addSet(i)} className="w-full mt-2 py-2 rounded-lg text-sm font-medium cursor-pointer" style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}>+ Add set</button>
+              <button onClick={() => addSet(i)} className="w-full mt-2 py-2 rounded-lg text-sm font-medium cursor-pointer" style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}>{t('calendar.addSet')}</button>
             </div>
           ))}
-          <button onClick={addExercise} className="py-3 rounded-2xl text-sm font-semibold cursor-pointer" style={{ background: 'var(--surface)', border: '1px dashed var(--border-strong)', color: 'var(--text-2)' }}>+ Add exercise</button>
+          <button onClick={addExercise} className="py-3 rounded-2xl text-sm font-semibold cursor-pointer" style={{ background: 'var(--surface)', border: '1px dashed var(--border-strong)', color: 'var(--text-2)' }}>{t('calendar.addExercise')}</button>
+
+          {/* Effort & feel — captured when you finish */}
+          <div className="rounded-2xl p-4 flex flex-col gap-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <div>
+              <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{t('calendar.fieldRpe')}</label>
+              <div className="flex items-center gap-3 mt-1">
+                <input type="range" min={1} max={10} step={1} value={rpe || 5} onChange={(e) => setRpe(e.target.value)} className="flex-1 cursor-pointer accent-[var(--accent)]" />
+                <span className="text-sm font-bold w-10 text-center" style={{ color: rpe ? 'var(--accent)' : 'var(--text-3)' }}>{rpe || '–'}</span>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{t('calendar.fieldFeel')}</label>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {FEELS.map((f) => {
+                  const active = feel === f.value;
+                  return (
+                    <button key={f.value} type="button" onClick={() => setFeel(active ? '' : f.value)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer"
+                      style={active ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
+                      {t(f.key)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

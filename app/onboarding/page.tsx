@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Pulse, WifiHigh, CheckCircle, Warning, DeviceMobile } from '@phosphor-icons/react';
+import { useI18n } from '@/lib/i18n/I18nProvider';
 
 type Step = 'welcome' | 'choose' | 'garmin' | 'terra' | 'success';
 type SuccessSource = 'garmin' | 'terra';
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [step, setStep] = useState<Step>('welcome');
   const [garminEmail, setGarminEmail] = useState('');
   const [garminPassword, setGarminPassword] = useState('');
@@ -31,7 +33,7 @@ export default function OnboardingPage() {
     const data = await res.json();
     setLoading(false);
     if (!res.ok) {
-      setError(data.error ?? 'Connection failed');
+      setError(data.error ?? t('onboarding.garmin.connectionFailed'));
     } else if (data.mfaRequired) {
       // Garmin emailed/texted a code — switch to the code-entry view.
       setMfaRequired(true);
@@ -54,7 +56,7 @@ export default function OnboardingPage() {
     const data = await res.json();
     setLoading(false);
     if (!res.ok) {
-      setError(data.error ?? 'Verification failed');
+      setError(data.error ?? t('onboarding.mfa.verificationFailed'));
       // Session expired server-side — send them back to re-enter credentials.
       if (data.restart) {
         setMfaRequired(false);
@@ -74,7 +76,7 @@ export default function OnboardingPage() {
     const data = await res.json();
     setLoading(false);
     if (!res.ok) {
-      setError(data.error ?? 'Failed to start connection');
+      setError(data.error ?? t('onboarding.terra.startFailed'));
     } else {
       // Open Terra widget in same tab - it will redirect back on completion
       window.location.href = data.url;
@@ -94,18 +96,18 @@ export default function OnboardingPage() {
             <Pulse size={32} weight="bold" color="white" />
           </div>
           <h1 className="text-3xl font-semibold tracking-tight mb-3" style={{ color: 'var(--text-1)' }}>
-            Welcome to PulseSync
+            {t('onboarding.welcome.title')}
           </h1>
           <p className="text-base leading-relaxed mb-10 max-w-sm mx-auto" style={{ color: 'var(--text-2)' }}>
-            Connect your wearable to start tracking your health and competing with friends.
+            {t('onboarding.welcome.subtitle')}
           </p>
 
           <div className="flex flex-col gap-3 text-left rounded-2xl p-6 mb-8" style={cardStyle}>
             {[
-              'Activities, steps, and distance',
-              'Sleep quality and recovery',
-              'HRV, body battery, and stress',
-              'Compare metrics with friends',
+              t('onboarding.welcome.features.activities'),
+              t('onboarding.welcome.features.sleep'),
+              t('onboarding.welcome.features.metrics'),
+              t('onboarding.welcome.features.compare'),
             ].map((text) => (
               <div key={text} className="flex items-center gap-3">
                 <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }} />
@@ -119,7 +121,7 @@ export default function OnboardingPage() {
             className="w-full py-3.5 rounded-xl text-sm font-semibold cursor-pointer"
             style={{ background: 'var(--accent)', color: 'white' }}
           >
-            Get started
+            {t('onboarding.welcome.getStarted')}
           </button>
         </div>
       </div>
@@ -131,10 +133,10 @@ export default function OnboardingPage() {
       <div className="min-h-[100dvh] flex items-center justify-center px-4" style={{ background: 'var(--bg)' }}>
         <div className="w-full max-w-sm">
           <h2 className="text-2xl font-semibold tracking-tight text-center mb-2" style={{ color: 'var(--text-1)' }}>
-            Choose your device
+            {t('onboarding.choose.title')}
           </h2>
           <p className="text-sm text-center mb-8" style={{ color: 'var(--text-2)' }}>
-            Connect your wearable to start syncing data.
+            {t('onboarding.choose.subtitle')}
           </p>
 
           <div className="flex flex-col gap-3">
@@ -149,8 +151,8 @@ export default function OnboardingPage() {
                 <WifiHigh size={20} color="white" weight="bold" />
               </div>
               <div>
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Garmin</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Fenix, Forerunner, Vivoactive...</p>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('onboarding.choose.garmin')}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{t('onboarding.choose.garminDevices')}</p>
               </div>
             </button>
 
@@ -165,8 +167,8 @@ export default function OnboardingPage() {
                 <DeviceMobile size={20} color="white" weight="bold" />
               </div>
               <div>
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Apple Health / Other</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Apple Watch, Fitbit, Whoop, Oura...</p>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('onboarding.choose.appleOther')}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{t('onboarding.choose.appleOtherDevices')}</p>
               </div>
             </button>
           </div>
@@ -176,7 +178,7 @@ export default function OnboardingPage() {
             className="w-full mt-6 py-3 rounded-xl text-sm cursor-pointer"
             style={{ color: 'var(--text-3)' }}
           >
-            Skip for now
+            {t('onboarding.choose.skip')}
           </button>
         </div>
       </div>
@@ -200,7 +202,7 @@ export default function OnboardingPage() {
             className="text-sm mb-6 cursor-pointer"
             style={{ color: 'var(--text-3)' }}
           >
-            Back
+            {t('onboarding.common.back')}
           </button>
 
           <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-6" style={{ background: 'rgba(232,82,28,0.12)' }}>
@@ -208,26 +210,26 @@ export default function OnboardingPage() {
           </div>
 
           <h2 className="text-2xl font-semibold tracking-tight text-center mb-2" style={{ color: 'var(--text-1)' }}>
-            {mfaRequired ? 'Enter your code' : 'Connect Garmin'}
+            {mfaRequired ? t('onboarding.mfa.title') : t('onboarding.garmin.title')}
           </h2>
           <p className="text-sm text-center mb-8" style={{ color: 'var(--text-2)' }}>
             {mfaRequired
-              ? 'Garmin sent a verification code to your email or phone. Enter it below to finish connecting.'
-              : 'Your credentials are used only to fetch your data and are stored encrypted.'}
+              ? t('onboarding.mfa.subtitle')
+              : t('onboarding.garmin.subtitle')}
           </p>
 
           {mfaRequired ? (
             <div className="rounded-2xl p-6" style={cardStyle}>
               <form onSubmit={submitMfaCode} className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Verification code</label>
+                  <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{t('onboarding.mfa.codeLabel')}</label>
                   <input
                     type="text"
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     value={mfaCode}
                     onChange={(e) => setMfaCode(e.target.value)}
-                    placeholder="123456"
+                    placeholder={t('onboarding.mfa.codePlaceholder')}
                     required
                     autoFocus
                     className="w-full px-4 py-3 rounded-xl text-sm outline-none tracking-[0.3em] text-center"
@@ -248,7 +250,7 @@ export default function OnboardingPage() {
                   className="w-full py-3 rounded-xl text-sm font-semibold mt-1 cursor-pointer disabled:opacity-50"
                   style={{ background: 'var(--accent)', color: 'white' }}
                 >
-                  {loading ? 'Verifying...' : 'Verify and connect'}
+                  {loading ? t('onboarding.mfa.verifying') : t('onboarding.mfa.verifyAndConnect')}
                 </button>
               </form>
             </div>
@@ -256,12 +258,12 @@ export default function OnboardingPage() {
             <div className="rounded-2xl p-6" style={cardStyle}>
               <form onSubmit={connectGarmin} className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Garmin Connect email</label>
+                  <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{t('onboarding.garmin.emailLabel')}</label>
                   <input
                     type="email"
                     value={garminEmail}
                     onChange={(e) => setGarminEmail(e.target.value)}
-                    placeholder="your@email.com"
+                    placeholder={t('onboarding.garmin.emailPlaceholder')}
                     required
                     className="w-full px-4 py-3 rounded-xl text-sm outline-none"
                     style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }}
@@ -270,12 +272,12 @@ export default function OnboardingPage() {
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Garmin Connect password</label>
+                  <label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{t('onboarding.garmin.passwordLabel')}</label>
                   <input
                     type="password"
                     value={garminPassword}
                     onChange={(e) => setGarminPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder={t('onboarding.garmin.passwordPlaceholder')}
                     required
                     className="w-full px-4 py-3 rounded-xl text-sm outline-none"
                     style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' }}
@@ -295,14 +297,14 @@ export default function OnboardingPage() {
                   className="w-full py-3 rounded-xl text-sm font-semibold mt-1 cursor-pointer disabled:opacity-50"
                   style={{ background: 'var(--accent)', color: 'white' }}
                 >
-                  {loading ? 'Connecting...' : 'Connect'}
+                  {loading ? t('onboarding.garmin.connecting') : t('onboarding.garmin.connect')}
                 </button>
               </form>
             </div>
           )}
 
           <p className="text-xs text-center mt-4" style={{ color: 'var(--text-3)' }}>
-            Works with 2FA enabled — we&apos;ll ask for your code if Garmin requires one.
+            {t('onboarding.garmin.twoFactorNote')}
           </p>
         </div>
       </div>
@@ -314,7 +316,7 @@ export default function OnboardingPage() {
       <div className="min-h-[100dvh] flex items-center justify-center px-4" style={{ background: 'var(--bg)' }}>
         <div className="w-full max-w-sm text-center">
           <button onClick={() => setStep('choose')} className="text-sm mb-6 cursor-pointer block" style={{ color: 'var(--text-3)' }}>
-            Back
+            {t('onboarding.common.back')}
           </button>
 
           <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-6" style={{ background: '#1d1d1f' }}>
@@ -322,14 +324,22 @@ export default function OnboardingPage() {
           </div>
 
           <h2 className="text-2xl font-semibold tracking-tight mb-2" style={{ color: 'var(--text-1)' }}>
-            Apple Health & More
+            {t('onboarding.terra.title')}
           </h2>
           <p className="text-sm mb-8 max-w-xs mx-auto" style={{ color: 'var(--text-2)' }}>
-            Connect Apple Watch, Fitbit, Whoop, Oura, Polar, and more. You'll be redirected to authorize your device.
+            {t('onboarding.terra.subtitle')}
           </p>
 
           <div className="rounded-2xl p-5 mb-6 text-left" style={cardStyle}>
-            {['Apple Health (Apple Watch)', 'Fitbit', 'Whoop', 'Oura Ring', 'Polar', 'Suunto', 'Withings'].map((device) => (
+            {[
+              t('onboarding.terra.devices.appleHealth'),
+              t('onboarding.terra.devices.fitbit'),
+              t('onboarding.terra.devices.whoop'),
+              t('onboarding.terra.devices.oura'),
+              t('onboarding.terra.devices.polar'),
+              t('onboarding.terra.devices.suunto'),
+              t('onboarding.terra.devices.withings'),
+            ].map((device) => (
               <div key={device} className="flex items-center gap-2.5 py-2">
                 <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }} />
                 <span className="text-sm" style={{ color: 'var(--text-2)' }}>{device}</span>
@@ -350,7 +360,7 @@ export default function OnboardingPage() {
             className="w-full py-3.5 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50"
             style={{ background: '#1d1d1f', color: 'white' }}
           >
-            {loading ? 'Opening...' : 'Connect my device'}
+            {loading ? t('onboarding.terra.opening') : t('onboarding.terra.connect')}
           </button>
         </div>
       </div>
@@ -364,19 +374,19 @@ export default function OnboardingPage() {
           <CheckCircle size={36} style={{ color: '#22c55e' }} weight="fill" />
         </div>
         <h2 className="text-2xl font-semibold tracking-tight mb-2" style={{ color: 'var(--text-1)' }}>
-          Connected!
+          {t('onboarding.success.title')}
         </h2>
         <p className="text-sm mb-8" style={{ color: 'var(--text-2)' }}>
           {successSource === 'garmin'
-            ? `Welcome, ${displayName}. Your Garmin data is being synced.`
-            : 'Your device is connected. Data will sync automatically.'}
+            ? t('onboarding.success.garminMessage', { name: displayName })
+            : t('onboarding.success.terraMessage')}
         </p>
         <button
           onClick={() => router.push('/dashboard')}
           className="w-full py-3.5 rounded-xl text-sm font-semibold cursor-pointer"
           style={{ background: 'var(--accent)', color: 'white' }}
         >
-          Go to dashboard
+          {t('onboarding.success.goToDashboard')}
         </button>
       </div>
     </div>
