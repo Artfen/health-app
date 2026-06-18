@@ -14,6 +14,8 @@ import {
   WifiHigh,
   TrendUp,
   TrendDown,
+  NotePencil,
+  X,
 } from '@phosphor-icons/react';
 import Link from 'next/link';
 import {
@@ -142,6 +144,25 @@ export default function DashboardClient({
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
+  const [logOpen, setLogOpen] = useState(false);
+  const [logSaving, setLogSaving] = useState(false);
+  const [logForm, setLogForm] = useState<Record<string, string>>({
+    date: new Date().toISOString().split('T')[0]!,
+  });
+
+  async function saveLog() {
+    setLogSaving(true);
+    const res = await fetch('/api/manual-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(logForm),
+    });
+    setLogSaving(false);
+    if (res.ok) {
+      setLogOpen(false);
+      window.location.href = '/dashboard';
+    }
+  }
 
   const name = profile?.full_name?.split(' ')[0] ?? 'Athlete';
   const hour = new Date().getHours();
@@ -205,12 +226,24 @@ export default function DashboardClient({
               {syncMsg}
             </span>
           )}
-          <button onClick={syncToday} disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium cursor-pointer disabled:opacity-40"
-            style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)', boxShadow: 'var(--shadow-sm)' }}>
-            <ArrowClockwise size={15} className={syncing ? 'animate-spin' : ''} />
-            <span className="hidden sm:inline">Sync now</span>
+          <button onClick={() => { setLogForm({ date: new Date().toISOString().split('T')[0]! }); setLogOpen(true); }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium cursor-pointer"
+            style={
+              profile?.garmin_connected
+                ? { background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)', boxShadow: 'var(--shadow-sm)' }
+                : { background: 'var(--accent)', color: '#fff', boxShadow: 'var(--shadow-sm)' }
+            }>
+            <NotePencil size={15} />
+            <span className="hidden sm:inline">Log</span>
           </button>
+          {profile?.garmin_connected && (
+            <button onClick={syncToday} disabled={syncing}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium cursor-pointer disabled:opacity-40"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)', boxShadow: 'var(--shadow-sm)' }}>
+              <ArrowClockwise size={15} className={syncing ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">Sync now</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -359,17 +392,114 @@ export default function DashboardClient({
           {/* Quick nav tiles */}
           <div className="grid grid-cols-2 gap-3">
             {[
-              { href: '/activities', label: 'Activities', desc: 'Training log', color: 'var(--accent)' },
-              { href: '/sleep', label: 'Sleep', desc: 'Recovery', color: '#6366f1' },
-              { href: '/group', label: 'Group', desc: 'Compete', color: '#16a34a' },
+              { href: '/calendar', label: 'Calendar', desc: 'Plan training', color: 'var(--accent)' },
               { href: '/coach', label: 'AI Coach', desc: 'Get coached', color: '#d97706' },
+              { href: '/sleep', label: 'Sleep', desc: 'Recovery', color: '#6366f1' },
+              { href: '/activities', label: 'Activities', desc: 'Training log', color: '#06b6d4' },
+              { href: '/group', label: 'Group', desc: 'Compete', color: '#16a34a' },
+              { href: '/team', label: 'Team', desc: 'Coach view', color: '#db2777' },
             ].map(({ href, label, desc, color }) => (
               <NavTile key={href} href={href} label={label} desc={desc} color={color} />
             ))}
           </div>
         </div>
       </div>
+
+      {/* Manual log modal */}
+      {logOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          style={{ background: 'rgba(0,0,0,0.4)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setLogOpen(false); }}>
+          <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-6 max-h-[90dvh] overflow-y-auto"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>Log your day</h3>
+              <button onClick={() => setLogOpen(false)} className="cursor-pointer" style={{ color: 'var(--text-3)' }}><X size={18} /></button>
+            </div>
+            <p className="text-xs mb-5" style={{ color: 'var(--text-3)' }}>
+              No wearable? Enter whatever you have. Everything is optional.
+            </p>
+
+            <div className="flex flex-col gap-3.5">
+              <LogField label="Date">
+                <input type="date" value={logForm.date ?? ''} onChange={(e) => setLogForm({ ...logForm, date: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none" style={logInputStyle} />
+              </LogField>
+
+              <div className="grid grid-cols-2 gap-3">
+                <LogField label="Steps"><LogInput k="steps" placeholder="8000" form={logForm} set={setLogForm} /></LogField>
+                <LogField label="Calories"><LogInput k="calories" placeholder="2200" form={logForm} set={setLogForm} /></LogField>
+              </div>
+
+              <LogField label="Sleep">
+                <div className="flex gap-2">
+                  <div className="flex-1 flex items-center gap-1.5 px-3 rounded-xl" style={logInputStyle}>
+                    <LogInput k="sleep_hours" placeholder="7" form={logForm} set={setLogForm} bare />
+                    <span className="text-xs" style={{ color: 'var(--text-3)' }}>h</span>
+                  </div>
+                  <div className="flex-1 flex items-center gap-1.5 px-3 rounded-xl" style={logInputStyle}>
+                    <LogInput k="sleep_minutes" placeholder="30" form={logForm} set={setLogForm} bare />
+                    <span className="text-xs" style={{ color: 'var(--text-3)' }}>m</span>
+                  </div>
+                </div>
+              </LogField>
+
+              <div className="grid grid-cols-2 gap-3">
+                <LogField label="Resting HR (bpm)"><LogInput k="resting_hr" placeholder="55" form={logForm} set={setLogForm} /></LogField>
+                <LogField label="HRV (ms)"><LogInput k="hrv_last_night" placeholder="60" form={logForm} set={setLogForm} /></LogField>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <LogField label="Body battery (peak)"><LogInput k="body_battery_high" placeholder="80" form={logForm} set={setLogForm} /></LogField>
+                <LogField label="Avg stress"><LogInput k="avg_stress" placeholder="30" form={logForm} set={setLogForm} /></LogField>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <LogField label="Distance (km)"><LogInput k="distance_km" placeholder="5" form={logForm} set={setLogForm} /></LogField>
+                <LogField label="Active (min)"><LogInput k="active_minutes" placeholder="45" form={logForm} set={setLogForm} /></LogField>
+              </div>
+
+              <button onClick={saveLog} disabled={logSaving}
+                className="w-full py-3 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50 mt-1"
+                style={{ background: 'var(--accent)', color: '#fff' }}>
+                {logSaving ? 'Saving...' : 'Save entry'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+const logInputStyle = {
+  background: 'var(--bg)',
+  border: '1px solid var(--border-strong)',
+  color: 'var(--text-1)',
+};
+
+function LogField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function LogInput({ k, placeholder, form, set, bare }: {
+  k: string; placeholder: string; form: Record<string, string>; set: (f: Record<string, string>) => void; bare?: boolean;
+}) {
+  return (
+    <input
+      type="number"
+      inputMode="decimal"
+      value={form[k] ?? ''}
+      onChange={(e) => set({ ...form, [k]: e.target.value })}
+      placeholder={placeholder}
+      className={bare ? 'w-full py-2.5 text-sm outline-none bg-transparent' : 'w-full px-3.5 py-2.5 rounded-xl text-sm outline-none'}
+      style={bare ? { color: 'var(--text-1)' } : logInputStyle}
+    />
   );
 }
 

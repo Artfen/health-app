@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { House, Pulse, Moon, Users, SignOut, WifiHigh, Gear, Brain } from '@phosphor-icons/react';
+import { House, Pulse, Moon, Users, SignOut, WifiHigh, Brain, CalendarBlank, Barbell } from '@phosphor-icons/react';
 import { createClient } from '@/lib/supabase/client';
 
 type Profile = {
@@ -13,12 +13,16 @@ type Profile = {
   garmin_display_name: string | null;
 } | null;
 
+// `mobile: false` keeps an item off the compact bottom bar (still reachable on
+// desktop and via in-app links) so the mobile bar stays at a clean 5 items.
 const NAV = [
-  { href: '/dashboard', icon: House, label: 'Overview' },
-  { href: '/activities', icon: Pulse, label: 'Activities' },
-  { href: '/sleep', icon: Moon, label: 'Sleep' },
-  { href: '/group', icon: Users, label: 'Group' },
-  { href: '/coach', icon: Brain, label: 'AI Coach' },
+  { href: '/dashboard', icon: House, label: 'Overview', mobile: true },
+  { href: '/activities', icon: Pulse, label: 'Activities', mobile: true },
+  { href: '/sleep', icon: Moon, label: 'Sleep', mobile: false },
+  { href: '/calendar', icon: CalendarBlank, label: 'Calendar', mobile: true },
+  { href: '/group', icon: Users, label: 'Group', mobile: false },
+  { href: '/team', icon: Barbell, label: 'Team', mobile: true },
+  { href: '/coach', icon: Brain, label: 'AI Coach', mobile: true },
 ];
 
 function SignOutButton({ onClick }: { onClick: () => void }) {
@@ -111,7 +115,7 @@ export default function Sidebar({ user }: { user: Profile }) {
       {/* Mobile bottom bar */}
       <nav className="fixed bottom-0 left-0 right-0 flex lg:hidden z-20"
         style={{ background: 'var(--surface)', borderTop: '1px solid var(--border)' }}>
-        {NAV.map(({ href, icon: Icon, label }) => {
+        {NAV.filter((n) => n.mobile).map(({ href, icon: Icon, label }) => {
           const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href));
           return (
             <Link key={href} href={href}
