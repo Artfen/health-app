@@ -29,7 +29,9 @@ $$;
 
 drop policy if exists "Group members can view their groups" on public.groups;
 create policy "Group members can view their groups"
-  on public.groups for select using (public.is_group_member(id, auth.uid()));
+  on public.groups for select using (
+    auth.uid() = owner_id or public.is_group_member(id, auth.uid())
+  );
 
 drop policy if exists "Users can view memberships in their groups" on public.group_members;
 create policy "Users can view memberships in their groups"

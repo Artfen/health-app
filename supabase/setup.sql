@@ -143,7 +143,9 @@ create policy "Users can only access their own tokens"
 
 -- groups
 create policy "Group members can view their groups"
-  on public.groups for select using (public.is_group_member(id, auth.uid()));
+  on public.groups for select using (
+    auth.uid() = owner_id or public.is_group_member(id, auth.uid())
+  );
 
 create policy "Users can create groups"
   on public.groups for insert with check (auth.uid() = owner_id);
