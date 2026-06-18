@@ -19,8 +19,10 @@ const part: Part = {
         subtitle: 'Connect your wearable to start syncing data.',
         garmin: 'Garmin',
         garminDevices: 'Fenix, Forerunner, Vivoactive...',
-        appleOther: 'Apple Health / Other',
-        appleOtherDevices: 'Apple Watch, Fitbit, Whoop, Oura...',
+        appleWatch: 'Apple Watch',
+        appleWatchDesc: 'Free sync with Apple Health',
+        otherDevices: 'Other devices',
+        otherDevicesDesc: 'Fitbit, Oura, Whoop, Polar & more',
         skip: 'Skip for now',
       },
       common: {
@@ -48,8 +50,8 @@ const part: Part = {
         verificationFailed: 'Verification failed',
       },
       terra: {
-        title: 'Apple Health & More',
-        subtitle: "Connect Apple Watch, Fitbit, Whoop, Oura, Polar, and more. You'll be redirected to authorize your device.",
+        title: 'Other devices',
+        subtitle: "Connect Fitbit, Whoop, Oura, Polar and more. You'll be redirected to authorize your device.",
         devices: {
           appleHealth: 'Apple Health (Apple Watch)',
           fitbit: 'Fitbit',
@@ -89,8 +91,10 @@ const part: Part = {
         subtitle: 'Connectez votre montre connectée pour commencer la synchronisation.',
         garmin: 'Garmin',
         garminDevices: 'Fenix, Forerunner, Vivoactive...',
-        appleOther: 'Apple Health / Autre',
-        appleOtherDevices: 'Apple Watch, Fitbit, Whoop, Oura...',
+        appleWatch: 'Apple Watch',
+        appleWatchDesc: 'Synchro gratuite avec Apple Santé',
+        otherDevices: 'Autres appareils',
+        otherDevicesDesc: 'Fitbit, Oura, Whoop, Polar et plus',
         skip: 'Ignorer pour l\'instant',
       },
       common: {
@@ -118,8 +122,8 @@ const part: Part = {
         verificationFailed: 'Échec de la vérification',
       },
       terra: {
-        title: 'Apple Health et plus',
-        subtitle: 'Connectez Apple Watch, Fitbit, Whoop, Oura, Polar et plus encore. Vous serez redirigé pour autoriser votre appareil.',
+        title: 'Autres appareils',
+        subtitle: 'Connectez Fitbit, Whoop, Oura, Polar et plus encore. Vous serez redirigé pour autoriser votre appareil.',
         devices: {
           appleHealth: 'Apple Health (Apple Watch)',
           fitbit: 'Fitbit',
@@ -159,8 +163,10 @@ const part: Part = {
         subtitle: 'Conecta tu dispositivo para empezar a sincronizar datos.',
         garmin: 'Garmin',
         garminDevices: 'Fenix, Forerunner, Vivoactive...',
-        appleOther: 'Apple Health / Otro',
-        appleOtherDevices: 'Apple Watch, Fitbit, Whoop, Oura...',
+        appleWatch: 'Apple Watch',
+        appleWatchDesc: 'Sincronización gratis con Apple Salud',
+        otherDevices: 'Otros dispositivos',
+        otherDevicesDesc: 'Fitbit, Oura, Whoop, Polar y más',
         skip: 'Omitir por ahora',
       },
       common: {
@@ -188,8 +194,8 @@ const part: Part = {
         verificationFailed: 'Error de verificación',
       },
       terra: {
-        title: 'Apple Health y más',
-        subtitle: 'Conecta Apple Watch, Fitbit, Whoop, Oura, Polar y más. Se te redirigirá para autorizar tu dispositivo.',
+        title: 'Otros dispositivos',
+        subtitle: 'Conecta Fitbit, Whoop, Oura, Polar y más. Se te redirigirá para autorizar tu dispositivo.',
         devices: {
           appleHealth: 'Apple Health (Apple Watch)',
           fitbit: 'Fitbit',
@@ -229,8 +235,10 @@ const part: Part = {
         subtitle: 'Verbinde dein Wearable, um mit der Datensynchronisierung zu beginnen.',
         garmin: 'Garmin',
         garminDevices: 'Fenix, Forerunner, Vivoactive...',
-        appleOther: 'Apple Health / Andere',
-        appleOtherDevices: 'Apple Watch, Fitbit, Whoop, Oura...',
+        appleWatch: 'Apple Watch',
+        appleWatchDesc: 'Kostenlose Synchro mit Apple Health',
+        otherDevices: 'Andere Geräte',
+        otherDevicesDesc: 'Fitbit, Oura, Whoop, Polar & mehr',
         skip: 'Vorerst überspringen',
       },
       common: {
@@ -258,8 +266,8 @@ const part: Part = {
         verificationFailed: 'Überprüfung fehlgeschlagen',
       },
       terra: {
-        title: 'Apple Health & mehr',
-        subtitle: 'Verbinde Apple Watch, Fitbit, Whoop, Oura, Polar und mehr. Du wirst weitergeleitet, um dein Gerät zu autorisieren.',
+        title: 'Andere Geräte',
+        subtitle: 'Verbinde Fitbit, Whoop, Oura, Polar und mehr. Du wirst weitergeleitet, um dein Gerät zu autorisieren.',
         devices: {
           appleHealth: 'Apple Health (Apple Watch)',
           fitbit: 'Fitbit',

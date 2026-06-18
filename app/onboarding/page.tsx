@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Pulse, WifiHigh, CheckCircle, Warning, DeviceMobile } from '@phosphor-icons/react';
+import { Pulse, WifiHigh, CheckCircle, Warning, DeviceMobile, AppleLogo } from '@phosphor-icons/react';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import AppleWatchSetup from '@/components/dashboard/AppleWatchSetup';
 
-type Step = 'welcome' | 'choose' | 'garmin' | 'terra' | 'success';
+type Step = 'welcome' | 'choose' | 'apple' | 'garmin' | 'terra' | 'success';
 type SuccessSource = 'garmin' | 'terra';
 
 export default function OnboardingPage() {
@@ -157,18 +158,34 @@ export default function OnboardingPage() {
             </button>
 
             <button
-              onClick={() => setStep('terra')}
+              onClick={() => setStep('apple')}
               className="w-full flex items-center gap-4 p-5 rounded-2xl text-left cursor-pointer transition-all"
               style={{ ...cardStyle, borderColor: 'var(--border)' }}
               onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)')}
               onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--border)')}
             >
               <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#1d1d1f' }}>
-                <DeviceMobile size={20} color="white" weight="bold" />
+                <AppleLogo size={20} color="white" weight="fill" />
               </div>
               <div>
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('onboarding.choose.appleOther')}</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{t('onboarding.choose.appleOtherDevices')}</p>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('onboarding.choose.appleWatch')}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{t('onboarding.choose.appleWatchDesc')}</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setStep('terra')}
+              className="w-full flex items-center gap-4 p-5 rounded-2xl text-left cursor-pointer transition-all"
+              style={{ ...cardStyle, borderColor: 'var(--border)' }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--border)')}
+            >
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                <DeviceMobile size={20} weight="bold" style={{ color: 'var(--text-2)' }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('onboarding.choose.otherDevices')}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{t('onboarding.choose.otherDevicesDesc')}</p>
               </div>
             </button>
           </div>
@@ -179,6 +196,41 @@ export default function OnboardingPage() {
             style={{ color: 'var(--text-3)' }}
           >
             {t('onboarding.choose.skip')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'apple') {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center px-4 py-10" style={{ background: 'var(--bg)' }}>
+        <div className="w-full max-w-md">
+          <button onClick={() => setStep('choose')} className="text-sm mb-6 cursor-pointer block" style={{ color: 'var(--text-3)' }}>
+            {t('onboarding.common.back')}
+          </button>
+
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-5" style={{ background: '#1d1d1f' }}>
+            <AppleLogo size={24} color="white" weight="fill" />
+          </div>
+
+          <h2 className="text-2xl font-semibold tracking-tight text-center mb-2" style={{ color: 'var(--text-1)' }}>
+            {t('appleWatch.title')}
+          </h2>
+          <p className="text-sm text-center mb-7 max-w-xs mx-auto" style={{ color: 'var(--text-2)' }}>
+            {t('appleWatch.subtitle')}
+          </p>
+
+          <div className="rounded-2xl p-6" style={cardStyle}>
+            <AppleWatchSetup onDone={() => router.push('/dashboard')} />
+          </div>
+
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="w-full mt-5 py-3 rounded-xl text-sm cursor-pointer"
+            style={{ color: 'var(--text-3)' }}
+          >
+            {t('appleWatch.later')}
           </button>
         </div>
       </div>
@@ -332,7 +384,6 @@ export default function OnboardingPage() {
 
           <div className="rounded-2xl p-5 mb-6 text-left" style={cardStyle}>
             {[
-              t('onboarding.terra.devices.appleHealth'),
               t('onboarding.terra.devices.fitbit'),
               t('onboarding.terra.devices.whoop'),
               t('onboarding.terra.devices.oura'),
