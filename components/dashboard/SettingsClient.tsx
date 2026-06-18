@@ -1,9 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Globe, User, Barbell } from '@phosphor-icons/react';
+import { Check, Globe, User, Barbell, Watch, Copy, ArrowClockwise } from '@phosphor-icons/react';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { LOCALES, LOCALE_NAMES, type Locale } from '@/lib/i18n/config';
+
+// After you publish the Apple Shortcut, paste its iCloud share link here so the
+// in-app "Install the shortcut" button works. Leave '' to hide that button.
+const SHORTCUT_INSTALL_URL = '';
 
 type Profile = {
   full_name?: string | null;
@@ -12,6 +16,9 @@ type Profile = {
   height_cm?: number | null;
   birth_year?: number | null;
   sex?: string | null;
+  garmin_connected?: boolean | null;
+  terra_connected?: boolean | null;
+  apple_health_token?: string | null;
 };
 
 const inputStyle = { background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text-1)' };
@@ -26,6 +33,34 @@ export default function SettingsClient({ profile }: { profile: Profile }) {
   const [sex, setSex] = useState(profile.sex ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const [appleToken, setAppleToken] = useState<string | null>(profile.apple_health_token ?? null);
+  const [appleBusy, setAppleBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const hasDevice = Boolean(profile.garmin_connected || profile.terra_connected);
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const syncUrl = appleToken ? `${origin}/api/apple-health/ingest?token=${appleToken}` : '';
+
+  async function setupApple(regenerate = false) {
+    setAppleBusy(true);
+    const res = await fetch('/api/apple-health/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ regenerate }),
+    });
+    const data = await res.json();
+    if (data.token) setAppleToken(data.token);
+    setAppleBusy(false);
+  }
+
+  async function copyLink() {
+    if (!syncUrl) return;
+    try {
+      await navigator.clipboard.writeText(syncUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard blocked — user can select the field manually */ }
+  }
 
   async function patch(body: Record<string, unknown>) {
     return fetch('/api/profile', {
@@ -61,6 +96,65 @@ export default function SettingsClient({ profile }: { profile: Profile }) {
         <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>{t('settings.title')}</h1>
         <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{t('settings.subtitle')}</p>
       </div>
+
+      {/* Devices — Connect Apple Watch (prominent for users without a device) */}
+      <Section icon={<Watch size={18} weight="bold" />} title={t('settings.devices.title')}
+        hint={hasDevice ? t('settings.devices.connected') : t('settings.devices.noDevice')}>
+        <div className="rounded-xl p-4" style={{ background: 'var(--surface-2)' }}>
+          <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('settings.devices.appleTitle')}</p>
+          <p className="text-xs mt-0.5 mb-3" style={{ color: 'var(--text-2)' }}>{t('settings.devices.appleDesc')}</p>
+
+          {!appleToken ? (
+            <button onClick={() => setupApple(false)} disabled={appleBusy}
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50"
+              style={{ background: 'var(--accent)', color: '#fff' }}>
+              {appleBusy ? t('settings.devices.generating') : t('settings.devices.setup')}
+            </button>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{t('settings.devices.yourLink')}</label>
+                <div className="flex items-center gap-2 mt-1">
+                  <input readOnly value={syncUrl} onFocus={(e) => e.currentTarget.select()}
+                    className="flex-1 px-3 py-2 rounded-lg text-xs outline-none font-mono" style={inputStyle} />
+                  <button onClick={copyLink}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1 flex-shrink-0"
+                    style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+                    {copied
+                      ? <><Check size={13} weight="bold" /> {t('settings.devices.copied')}</>
+                      : <><Copy size={13} /> {t('settings.devices.copy')}</>}
+                  </button>
+                </div>
+                <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{t('settings.devices.linkHint')}</p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>{t('settings.devices.stepsTitle')}</p>
+                <ol className="flex flex-col gap-1.5 text-xs list-decimal pl-4" style={{ color: 'var(--text-2)' }}>
+                  <li>{t('settings.devices.step1')}</li>
+                  <li>{t('settings.devices.step2')}</li>
+                  <li>{t('settings.devices.step3')}</li>
+                  <li>{t('settings.devices.step4')}</li>
+                  <li>{t('settings.devices.step5')}</li>
+                </ol>
+                {SHORTCUT_INSTALL_URL && (
+                  <a href={SHORTCUT_INSTALL_URL} target="_blank" rel="noopener noreferrer"
+                    className="inline-block mt-3 px-4 py-2 rounded-xl text-sm font-semibold"
+                    style={{ background: 'var(--accent)', color: '#fff' }}>
+                    {t('settings.devices.installShortcut')}
+                  </a>
+                )}
+              </div>
+
+              <button onClick={() => setupApple(true)} disabled={appleBusy}
+                className="self-start text-xs font-medium flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                style={{ color: 'var(--text-3)' }}>
+                <ArrowClockwise size={12} /> {t('settings.devices.reset')}
+              </button>
+            </div>
+          )}
+        </div>
+      </Section>
 
       {/* Language */}
       <Section icon={<Globe size={18} weight="bold" />} title={t('settings.languageSection')} hint={t('settings.languageHint')}>

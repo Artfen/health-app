@@ -7,9 +7,11 @@ export default async function SettingsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
+  // select('*') so the page still renders if a migration (v7/v8 columns)
+  // hasn't been run yet — missing columns are simply absent, not an error.
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, locale, weight_kg, height_cm, birth_year, sex')
+    .select('*')
     .eq('id', user.id)
     .single();
 
