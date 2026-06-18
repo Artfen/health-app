@@ -60,6 +60,18 @@ export type StoredTokens = {
   profile: GarminUserProfile | null;
 };
 
+// Transient state captured between the credentials step and the MFA-code step.
+// Holds the serialized SSO cookie jar + the MFA CSRF token so the flow can be
+// resumed in a separate (stateless) request once the user enters their code.
+export type GarminMfaState = {
+  cookieJar: string;
+  csrf: string;
+};
+
+export type ConnectResult =
+  | { mfaRequired: false }
+  | { mfaRequired: true; mfaState: GarminMfaState };
+
 export type RequestOptions = {
   method?: string;
   body?: unknown;
@@ -201,13 +213,51 @@ export class GarminAuth {
     this.isAuthenticated = true;
   }
 
+  // Public entry point for the initial connect. Returns { mfaRequired: true }
+  // (plus resumable state) when Garmin demands a 2FA code, otherwise completes
+  // the connection and stores tokens.
+  async connect(): Promise<ConnectResult> {
+    await this.fetchOAuthConsumer();
+    const result = await this.beginLogin();
+
+    if ('mfa' in result) {
+      return { mfaRequired: true, mfaState: result.mfa };
+    }
+
+    await this.completeLogin(result.ticket);
+    return { mfaRequired: false };
+  }
+
+  // Resumes a connect that paused on MFA: submits the code, then finishes auth.
+  async completeMfa(mfaState: GarminMfaState, code: string): Promise<void> {
+    await this.fetchOAuthConsumer();
+    const ticket = await this.resumeLoginWithMfa(mfaState, code);
+    await this.completeLogin(ticket);
+  }
+
   private async login(): Promise<void> {
     await this.fetchOAuthConsumer();
-    const ticket = await this.getLoginTicket();
+    const result = await this.beginLogin();
+
+    if ('mfa' in result) {
+      // Reached only when a stored session expired and a fresh interactive
+      // login is needed. The data-fetch path can't prompt for a code, so we
+      // surface a clear instruction to reconnect.
+      throw new Error(
+        'MFA_REQUIRED: Your Garmin session expired and needs a new 2FA code. Please reconnect Garmin.',
+      );
+    }
+
+    await this.completeLogin(result.ticket);
+  }
+
+  private async completeLogin(ticket: string): Promise<void> {
     await this.exchangeTicketForOAuth1(ticket);
     await this.exchangeOAuth1ForOAuth2();
     await this.fetchProfile();
     await this.saveTokens();
+    this.isAuthenticated = true;
+    this.loaded = true;
   }
 
   private async fetchProfile(): Promise<void> {
@@ -233,7 +283,23 @@ export class GarminAuth {
     this.consumer = response.data;
   }
 
-  private async getLoginTicket(): Promise<string> {
+  // Static SSO query params shared by the signin POST and the MFA-verify POST.
+  private static SIGNIN_PARAMS = {
+    id: SSO_WIDGET_ID,
+    embedWidget: true,
+    locale: SSO_LOCALE,
+    gauthHost: SSO_EMBED,
+    clientId: SSO_CLIENT_ID,
+    service: SSO_EMBED,
+    source: SSO_EMBED,
+    redirectAfterAccountLoginUrl: SSO_EMBED,
+    redirectAfterAccountCreationUrl: SSO_EMBED,
+  } as const;
+
+  // Submits credentials to the SSO endpoint. Returns the login ticket directly,
+  // or — when the account has 2FA — the resumable MFA state (serialized cookie
+  // jar + CSRF) so the caller can finish once the user supplies their code.
+  private async beginLogin(): Promise<{ ticket: string } | { mfa: GarminMfaState }> {
     const jar = new CookieJar();
     const ssoClient = wrapper(axios.create({ jar, withCredentials: true }));
 
@@ -242,7 +308,7 @@ export class GarminAuth {
       headers: { 'User-Agent': USER_AGENT_BROWSER },
     });
 
-    const signinParams = {
+    const getParams = {
       id: SSO_WIDGET_ID,
       embedWidget: true,
       locale: SSO_LOCALE,
@@ -250,7 +316,7 @@ export class GarminAuth {
     };
 
     const signinResponse = await ssoClient.get(SSO_SIGNIN, {
-      params: signinParams,
+      params: getParams,
       headers: { 'User-Agent': USER_AGENT_BROWSER },
     });
 
@@ -266,14 +332,7 @@ export class GarminAuth {
         _csrf: csrfMatch[1]!,
       }).toString(),
       {
-        params: {
-          ...signinParams,
-          clientId: SSO_CLIENT_ID,
-          service: SSO_EMBED,
-          source: SSO_EMBED,
-          redirectAfterAccountLoginUrl: SSO_EMBED,
-          redirectAfterAccountCreationUrl: SSO_EMBED,
-        },
+        params: GarminAuth.SIGNIN_PARAMS,
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'User-Agent': USER_AGENT_BROWSER,
@@ -284,21 +343,64 @@ export class GarminAuth {
       },
     );
 
-    let responseHtml: string = loginResponse.data;
-
+    const responseHtml: string = loginResponse.data;
     const titleMatch = TITLE_REGEX.exec(responseHtml);
+
     if (titleMatch?.[1]?.includes('MFA')) {
       const mfaCsrfMatch = CSRF_REGEX.exec(responseHtml);
       if (!mfaCsrfMatch) throw new Error('Failed to extract CSRF token for MFA');
 
-      throw new Error(
-        'MFA_REQUIRED: Your Garmin account has MFA enabled. Please disable MFA temporarily to connect, or contact support.',
-      );
+      return {
+        mfa: {
+          cookieJar: JSON.stringify(jar.toJSON()),
+          csrf: mfaCsrfMatch[1]!,
+        },
+      };
     }
 
     const ticketMatch = TICKET_REGEX.exec(responseHtml);
     if (!ticketMatch)
       throw new Error('LOGIN_FAILED: Invalid Garmin credentials. Please check and try again.');
+
+    return { ticket: ticketMatch[1]! };
+  }
+
+  // Submits the 2FA code using the cookie jar captured by beginLogin and
+  // returns the login ticket.
+  private async resumeLoginWithMfa(mfaState: GarminMfaState, code: string): Promise<string> {
+    const jar = CookieJar.fromJSON(mfaState.cookieJar);
+    const ssoClient = wrapper(axios.create({ jar, withCredentials: true }));
+
+    const mfaResponse = await ssoClient.post(
+      SSO_VERIFY_MFA,
+      new URLSearchParams({
+        'mfa-code': code.trim(),
+        embed: 'true',
+        _csrf: mfaState.csrf,
+        fromPage: 'setupEnterMfaCode',
+      }).toString(),
+      {
+        params: GarminAuth.SIGNIN_PARAMS,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': USER_AGENT_BROWSER,
+          Origin: SSO_ORIGIN,
+          Referer: SSO_VERIFY_MFA,
+          Dnt: '1',
+        },
+      },
+    );
+
+    const responseHtml: string = mfaResponse.data;
+    const ticketMatch = TICKET_REGEX.exec(responseHtml);
+
+    if (!ticketMatch) {
+      const titleMatch = TITLE_REGEX.exec(responseHtml);
+      if (titleMatch?.[1]?.includes('MFA')) {
+        throw new Error('MFA_INVALID: That code was incorrect or expired. Please try again.');
+      }
+      throw new Error('MFA_FAILED: Could not verify the 2FA code. Please reconnect and try again.');
+    }
 
     return ticketMatch[1]!;
   }
